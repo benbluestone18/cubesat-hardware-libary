@@ -33,14 +33,29 @@ export async function signInWithGoogle(form: FormData) {
   redirect(data.url);
 }
 
-export async function signInWithEmail(form: FormData) {
+export type EmailLinkState =
+  | { status: "idle" }
+  | { status: "sent"; email: string; retryAt: number }
+  | { status: "error"; message: string; email: string; retryAt?: number };
+
+/** Sends a sign-in link and reports back to the form, so the page can show what happened without reloading. */
+export async function sendEmailLink(_prev: EmailLinkState, form: FormData): Promise<EmailLinkState> {
   const next = safePath(str(form, "next"), "/");
   const email = str(form, "email", 200).toLowerCase();
-  const retry = (msg: string, kind = "error") => redirect(`/login?${kind}=${encodeURIComponent(msg)}&next=${encodeURIComponent(next)}`);
-  if (!emailSignInEnabled()) retry("Email sign-in is turned off. Use Google.");
-  if (!email.endsWith("@" + SCHOOL_DOMAIN)) retry(`Use your @${SCHOOL_DOMAIN} school email`);
+  const fail = (message: string, retryAt?: number): EmailLinkState => ({ status: "error", message, email, retryAt });
+  if (!emailSignInEnabled()) return fail("Email sign-in is turned off. Use Google.");
+  if (!email.endsWith("@" + SCHOOL_DOMAIN)) return fail(`Use your @${SCHOOL_DOMAIN} school email.`);
   const supabase = await createClient();
   const { error } = await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: callback(await origin(), next) } });
-  if (error) retry(error.status === 429 ? "Too many emails. Wait a minute and try again." : "Couldn't send the email. Wait a minute and try again, or tell the admin.");
-  retry(`Check ${email} for a sign-in link. Look in spam too.`, "ok");
+  if (error) {
+    if (error.status === 429) {
+      // One email per address per minute: Supabase says how many seconds are left.
+      const left = /(\d+)\s*second/i.exec(error.message)?.[1];
+      if (left) return fail("A link was already sent to this address in the last minute. Check your inbox and spam before asking for another.", Date.now() + Number(left) * 1000);
+      // Otherwise the whole site hit its hourly email limit.
+      return fail("The library has sent too many sign-in emails this hour. Try again later, or use Google.", Date.now() + 60_000);
+    }
+    return fail("Couldn't send the email. Wait a minute and try again, or tell the admin.");
+  }
+  return { status: "sent", email, retryAt: Date.now() + 60_000 };
 }
