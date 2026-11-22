@@ -66,7 +66,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
               </form>
             </>
           )}
-          <p className="login__legal"><Link href="/privacy">Privacy</Link></p>
+          <p className="login__legal"><Link href="/privacy">Privacy</Link> and <Link href="/terms">terms</Link></p>
         </div>
       </main>
     </div>
