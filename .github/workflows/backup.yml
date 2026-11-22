@@ -1,0 +1,30 @@
+# Weekly database backup. Also keeps the free Supabase project from pausing after 7 quiet days.
+# Needs one repository secret: SUPABASE_DB_URL (Supabase > Connect > Session pooler connection string).
+# The backup holds team members' names and school emails, so keep this repository private.
+name: Weekly backup
+on:
+  schedule:
+    - cron: "0 12 * * 1" # Mondays, 4 or 5 AM in California
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install the Postgres client
+        run: sudo apt-get update -q && sudo apt-get install -yq postgresql-client
+      - name: Dump the library
+        env:
+          DB: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          test -n "$DB" || { echo "Add the SUPABASE_DB_URL secret first"; exit 1; }
+          pg_dump "$DB" --no-owner --no-privileges --schema=public --schema=auth --schema=storage -Fc -f library.dump
+          ls -lh library.dump
+      - uses: actions/upload-artifact@v4
+        with:
+          name: library-${{ github.run_id }}
+          path: library.dump
+          retention-days: 90
