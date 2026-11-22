@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getLibrary, getMemberships, type ComponentWithHealth, type Library } from "@/lib/data";
+import { canManageTeam, getLibrary, getMemberships, type ComponentWithHealth, type Library } from "@/lib/data";
 import { STATUS_LABEL, STATUS_ORDER, byUrgency, type ComponentStatus, type Health } from "@/lib/status";
 import type { Folder } from "@/lib/types";
-import { createFolder, joinProject, leaveProject, renameFolder, trashFolder, trashProject, updateProject } from "@/app/actions/projects";
+import { addMember, createFolder, joinProject, leaveProject, removeMember, setLead, renameFolder, trashFolder, trashProject, updateProject } from "@/app/actions/projects";
 import { Face, Empty } from "@/components/ui";
 import { Icon, StatusIcon } from "@/components/icons";
 import { ConfirmButton } from "@/components/client";
@@ -119,8 +119,13 @@ export default async function ProjectPage({ params, searchParams }: { params: Pa
   const all = lib.components.filter((c) => c.project_id === id);
   const comps = all.filter((c) => (!ownerFilter || c.owner_id === ownerFilter) && (!statusFilter || c.status === statusFilter));
   const folders = lib.folders.filter((f) => f.project_id === id);
-  const members = memberships.filter((m) => m.project_id === id).map((m) => lib.person.get(m.person_id)!).filter(Boolean);
+  const rows = memberships.filter((m) => m.project_id === id);
+  const leads = new Set(rows.filter((m) => m.lead).map((m) => m.person_id));
+  const members = rows.map((m) => lib.person.get(m.person_id)!).filter(Boolean)
+    .sort((a, b) => Number(leads.has(b.id)) - Number(leads.has(a.id)) || a.name.localeCompare(b.name));
   const isMember = members.some((m) => m.id === lib.me.id);
+  const manage = canManageTeam(lib.me, id, memberships);
+  const others = lib.people.filter((p) => !members.some((m) => m.id === p.id));
   const owners = [...new Set(all.map((c) => c.owner_id))].map((o) => lib.person.get(o)).filter(Boolean);
   const columns = COLUMNS.filter((col) => col.key !== "hold" || comps.some((c) => c.status === "on_hold"));
 
@@ -190,17 +195,52 @@ export default async function ProjectPage({ params, searchParams }: { params: Pa
 
         <div className="stack">
           <section className="mc-panel mc-glass">
-            <div className="mc-panel__head"><h2>Members</h2><span className="mc-label">{members.length}</span></div>
-            {members.length === 0 ? <p className="muted" style={{ fontSize: 13 }}>No one has joined yet.</p> : (
+            <div className="mc-panel__head"><h2>Team</h2><span className="mc-label">{members.length}</span></div>
+            {members.length === 0 ? <p className="muted" style={{ fontSize: 13 }}>No one is on this team yet.</p> : (
               <div className="stack-sm" style={{ gap: 2 }}>
                 {members.map((m) => (
-                  <Link key={m.id} className="person-row" href={`/people/${m.id}`} style={{ gridTemplateColumns: "auto 1fr" }}>
-                    <Face person={m} size={32} link={false} />
-                    <div><div className="person-row__name">{m.name}</div><div className="person-row__meta">{all.filter((c) => c.owner_id === m.id).length} parts here</div></div>
-                  </Link>
+                  <div key={m.id} className="member-row">
+                    <Link className="person-row" href={`/people/${m.id}`} style={{ gridTemplateColumns: "auto 1fr" }}>
+                      <Face person={m} size={32} link={false} />
+                      <div>
+                        <div className="person-row__name">{m.name}{leads.has(m.id) && <span className="mc-chip" style={{ marginLeft: 8 }}>Lead</span>}</div>
+                        <div className="person-row__meta">{((n) => `${n} ${n === 1 ? "part" : "parts"} here`)(all.filter((c) => c.owner_id === m.id).length)}</div>
+                      </div>
+                    </Link>
+                    {manage && (
+                      <details className="inline member-row__menu">
+                        <summary className="mc-icon-btn mc-icon-btn--sm" aria-label={`Change ${m.name}'s place on the team`}><Icon name="chevron" /></summary>
+                        <div className="mc-panel mc-glass popover stack-sm">
+                          <form action={setLead}>
+                            <input type="hidden" name="project_id" value={id} /><input type="hidden" name="person_id" value={m.id} />
+                            <input type="hidden" name="lead" value={leads.has(m.id) ? "false" : "true"} />
+                            <button className="mc-btn mc-btn--secondary mc-btn--sm" type="submit">{leads.has(m.id) ? "Remove as lead" : "Make team lead"}</button>
+                          </form>
+                          <form action={removeMember}>
+                            <input type="hidden" name="project_id" value={id} /><input type="hidden" name="person_id" value={m.id} />
+                            <ConfirmButton className="mc-btn mc-btn--ghost mc-btn--sm" confirmLabel={`Yes, remove ${m.name.split(" ")[0]}`}>Remove from team</ConfirmButton>
+                          </form>
+                        </div>
+                      </details>
+                    )}
+                  </div>
                 ))}
               </div>
             )}
+            {manage && others.length > 0 && (
+              <form action={addMember} className="row" style={{ marginTop: 12 }}>
+                <input type="hidden" name="project_id" value={id} />
+                <select className="select input--inline" name="person_id" required defaultValue="" aria-label="Person to add" style={{ flex: 1, minWidth: 0 }}>
+                  <option value="" disabled>Add someone…</option>
+                  {others.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+                <button className="mc-btn mc-btn--secondary mc-btn--sm" type="submit">Add</button>
+              </form>
+            )}
+            <p className="faint" style={{ fontSize: 12, marginTop: 8 }}>
+              {manage ? "As " + (lib.me.role === "admin" ? "an admin" : "a team lead") + ", you can add people, remove them and choose leads. Anyone can join or leave on their own."
+                : "Team leads and admins can add people. You can join or leave on your own with the button at the top."}
+            </p>
           </section>
           <section className="mc-panel mc-glass">
             <details className="inline">
