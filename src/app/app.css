@@ -130,11 +130,11 @@ details.inline[open] > summary { margin-bottom: 12px; }
 /* Sign-in: a night-sky scene on the left (always dark), the form on the right */
 .login { min-height: 100vh; display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(360px, 1fr); grid-template-rows: 1fr; background: var(--bg); }
 .login__scene, .login__intro { grid-column: 1; grid-row: 1; }
-.login__scene { position: relative; overflow: hidden; background: radial-gradient(120% 70% at 20% 0%, #13254a 0%, #070d1c 60%); }
+.login__scene { position: relative; overflow: hidden; background: #000; }
 .login__intro { position: relative; z-index: 1; align-self: start; padding: clamp(28px, 5vw, 64px); color: #f3f6fb; }
 .login__mark { font-weight: 600; font-size: 15px; color: #c9d6ec; margin-bottom: clamp(48px, 12vh, 120px); }
 .login__intro h1 { font-family: var(--font-display); font-stretch: 125%; font-weight: 800; font-size: clamp(48px, 7vw, 104px); line-height: .92; letter-spacing: -0.035em; }
-.login__lede { margin-top: 24px; max-width: 30ch; font-size: 18px; line-height: 1.5; color: #b7c4dc; }
+.login__lede { margin-top: 24px; max-width: 30ch; font-size: 18px; line-height: 1.5; color: #d5deec; text-shadow: 0 1px 12px rgba(0,0,0,.6); }
 .login__panel { grid-column: 2; display: grid; place-items: center; padding: 48px 32px; }
 .login__form { width: min(360px, 100%); display: flex; flex-direction: column; gap: 16px; }
 .login__form h2 { font-family: var(--font-display); font-stretch: 112%; font-weight: 700; font-size: 28px; letter-spacing: -0.02em; }
@@ -149,24 +149,19 @@ details.inline[open] > summary { margin-bottom: 12px; }
 [data-theme="dark"] .btn-google { background: #131314; color: #e3e3e3; border-color: #8e918f; }
 [data-theme="dark"] .btn-google:hover { background: #1f2023; }
 
-.orbit { position: absolute; inset: 0; width: 100%; height: 100%; }
-.orbit__star { fill: #dbe6ff; opacity: .7; }
-.orbit__air { fill: none; stroke: #6fb4ff; stroke-width: 26; opacity: .55; }
-.orbit__path { fill: none; stroke: #8fb3ec; stroke-opacity: .35; stroke-width: 1.2; stroke-dasharray: 2 7; }
-.orbit__panel { fill: #1c3a74; stroke: #9fc0f5; stroke-width: 1; }
-.orbit__cells { stroke: #9fc0f5; stroke-opacity: .45; stroke-width: .8; }
-.orbit__strut { stroke: #c9d6ec; stroke-width: 2; }
-.orbit__body { fill: #d9dee8; stroke: #ffffff; stroke-width: 1; }
-.orbit__lens { fill: #23324d; }
-/* One moment on load: the satellite glides into place along its orbit */
-.orbit__sat { transform-box: view-box; transform-origin: 400px 1560px; animation: orbit-in 2.8s cubic-bezier(.2, .7, .2, 1) both; }
-@keyframes orbit-in { from { transform: rotate(-16deg); } to { transform: rotate(0deg); } }
-@media (prefers-reduced-motion: reduce) { .orbit__sat { animation: none; } }
+.login__photo { object-fit: cover; object-position: 50% 0%; animation: photo-in 2.4s cubic-bezier(.2, .7, .2, 1) both; }
+/* Darken the top and left so the title reads over the photo; a light veil at the bottom keeps the credit legible */
+.login__scene::after { content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(150deg, rgba(0,0,0,.78) 0%, rgba(0,0,0,.6) 30%, rgba(0,0,0,.15) 55%, rgba(0,0,0,0) 70%), linear-gradient(0deg, rgba(0,0,0,.35), rgba(0,0,0,0) 20%); }
+.login__credit { position: absolute; right: 16px; bottom: 12px; z-index: 1; font-size: 11px; color: rgba(255,255,255,.7); }
+/* One moment on load: the photo settles from a slight zoom */
+@keyframes photo-in { from { transform: scale(1.06); opacity: .6; } to { transform: scale(1); opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .login__photo { animation: none; } }
 
 @media (max-width: 860px) {
   .login { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
   .login__scene, .login__intro { grid-row: 1; }
-  .login__scene { min-height: 460px; }
+  .login__scene { min-height: 480px; }
   .login__mark { margin-bottom: 40px; }
   .login__intro { padding: 24px 20px 220px; }
   .login__lede { font-size: 16px; }
