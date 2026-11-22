@@ -127,10 +127,51 @@ details.inline[open] > summary { margin-bottom: 12px; }
 .result__sub { font-size: 13px; color: var(--ink-muted); overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 
 /* Sign-in */
-.login { min-height: 100vh; display: grid; place-items: center; padding: 24px 16px; }
-.login__card { width: min(420px, 100%); padding: 32px 28px; border-radius: 28px; display: flex; flex-direction: column; gap: 20px; }
-.login__card h1 { font-family: var(--font-display); font-stretch: 125%; font-weight: 800; font-size: 32px; line-height: 34px; letter-spacing: -0.03em; }
-.btn-google { width: 100%; height: 44px; font-size: 15px; }
+/* Sign-in: a night-sky scene on the left (always dark), the form on the right */
+.login { min-height: 100vh; display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(360px, 1fr); grid-template-rows: 1fr; background: var(--bg); }
+.login__scene, .login__intro { grid-column: 1; grid-row: 1; }
+.login__scene { position: relative; overflow: hidden; background: radial-gradient(120% 70% at 20% 0%, #13254a 0%, #070d1c 60%); }
+.login__intro { position: relative; z-index: 1; align-self: start; padding: clamp(28px, 5vw, 64px); color: #f3f6fb; }
+.login__mark { font-weight: 600; font-size: 15px; color: #c9d6ec; margin-bottom: clamp(48px, 12vh, 120px); }
+.login__intro h1 { font-family: var(--font-display); font-stretch: 125%; font-weight: 800; font-size: clamp(48px, 7vw, 104px); line-height: .92; letter-spacing: -0.035em; }
+.login__lede { margin-top: 24px; max-width: 30ch; font-size: 18px; line-height: 1.5; color: #b7c4dc; }
+.login__panel { grid-column: 2; display: grid; place-items: center; padding: 48px 32px; }
+.login__form { width: min(360px, 100%); display: flex; flex-direction: column; gap: 16px; }
+.login__form h2 { font-family: var(--font-display); font-stretch: 112%; font-weight: 700; font-size: 28px; letter-spacing: -0.02em; }
+.login__form > p.muted { font-size: 15px; line-height: 1.5; margin-bottom: 8px; }
+/* Google's own button style: white, hairline border, full-colour mark */
+.btn-google { width: 100%; height: 48px; display: inline-flex; align-items: center; justify-content: center; gap: 12px; border-radius: 999px;
+  background: #fff; color: #1f1f1f; border: 1px solid #747775; font: 500 15px/1 var(--font-sans); cursor: pointer;
+  transition: background-color .15s, box-shadow .15s, transform .15s; }
+.btn-google:hover { background: #f4f6f9; box-shadow: 0 2px 8px -2px rgba(0,0,0,.18); }
+.btn-google:active { transform: scale(.985); }
+.btn-google:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+[data-theme="dark"] .btn-google { background: #131314; color: #e3e3e3; border-color: #8e918f; }
+[data-theme="dark"] .btn-google:hover { background: #1f2023; }
+
+.orbit { position: absolute; inset: 0; width: 100%; height: 100%; }
+.orbit__star { fill: #dbe6ff; opacity: .7; }
+.orbit__air { fill: none; stroke: #6fb4ff; stroke-width: 26; opacity: .55; }
+.orbit__path { fill: none; stroke: #8fb3ec; stroke-opacity: .35; stroke-width: 1.2; stroke-dasharray: 2 7; }
+.orbit__panel { fill: #1c3a74; stroke: #9fc0f5; stroke-width: 1; }
+.orbit__cells { stroke: #9fc0f5; stroke-opacity: .45; stroke-width: .8; }
+.orbit__strut { stroke: #c9d6ec; stroke-width: 2; }
+.orbit__body { fill: #d9dee8; stroke: #ffffff; stroke-width: 1; }
+.orbit__lens { fill: #23324d; }
+/* One moment on load: the satellite glides into place along its orbit */
+.orbit__sat { transform-box: view-box; transform-origin: 400px 1560px; animation: orbit-in 2.8s cubic-bezier(.2, .7, .2, 1) both; }
+@keyframes orbit-in { from { transform: rotate(-16deg); } to { transform: rotate(0deg); } }
+@media (prefers-reduced-motion: reduce) { .orbit__sat { animation: none; } }
+
+@media (max-width: 860px) {
+  .login { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+  .login__scene, .login__intro { grid-row: 1; }
+  .login__scene { min-height: 460px; }
+  .login__mark { margin-bottom: 40px; }
+  .login__intro { padding: 24px 20px 220px; }
+  .login__lede { font-size: 16px; }
+  .login__panel { grid-column: 1; grid-row: 2; padding: 32px 20px 48px; place-items: start center; }
+}
 .or { display: flex; align-items: center; gap: 12px; color: var(--ink-faint); font-size: 12px; }
 .or::before, .or::after { content: ""; flex: 1; height: 1px; background: var(--border); }
 
