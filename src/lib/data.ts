@@ -3,7 +3,7 @@ import { cache } from "react";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { componentHealth, personHealth, type HealthResult } from "@/lib/status";
-import type { Component, Folder, Person, Project, Update } from "@/lib/types";
+import type { Component, Folder, Membership, Person, Project, Update } from "@/lib/types";
 
 /** The signed-in person, or a redirect to sign-in. Cached for one request. */
 export const getMe = cache(async (): Promise<Person> => {
@@ -115,8 +115,13 @@ export async function peopleHealth(lib: Library) {
   });
 }
 
-export async function getMemberships(): Promise<{ person_id: string; project_id: string }[]> {
+export async function getMemberships(): Promise<Membership[]> {
   const supabase = await createClient();
-  const { data } = await supabase.from("memberships").select("person_id, project_id");
-  return data ?? [];
+  const { data } = await supabase.from("memberships").select("person_id, project_id, lead");
+  return (data ?? []) as Membership[];
+}
+
+/** Admins, and leads of this team, can add and remove people and choose leads. */
+export function canManageTeam(me: Person, projectId: string, memberships: Membership[]): boolean {
+  return me.role === "admin" || memberships.some((m) => m.project_id === projectId && m.person_id === me.id && m.lead);
 }

@@ -4,10 +4,10 @@ import { notFound } from "next/navigation";
 import { canEdit, getLibrary } from "@/lib/data";
 import { createClient } from "@/lib/supabase/server";
 import { STATUS_LABEL, STATUS_ORDER } from "@/lib/status";
-import type { Comment, FileRow, Update } from "@/lib/types";
+import type { Comment, ComponentLink, FileRow, Update } from "@/lib/types";
 import { ago, shortDate, weekStart } from "@/lib/week";
 import { addComment, addEditor, deleteComment, handOff, removeEditor, setStatus } from "@/app/actions/components";
-import { trashFile } from "@/app/actions/files";
+import { addLink, removeLink, trashFile } from "@/app/actions/files";
 import { UpdateEntry } from "@/components/cards";
 import { Face, HealthState, Track, Empty } from "@/components/ui";
 import { Icon } from "@/components/icons";
@@ -35,16 +35,18 @@ export default async function ComponentPage({ params, searchParams }: { params: 
   if (!c) notFound();
 
   const supabase = await createClient();
-  const [{ data: ed }, { data: files }, { data: updates }, { data: comments }] = await Promise.all([
+  const [{ data: ed }, { data: files }, { data: updates }, { data: comments }, { data: linkRows }] = await Promise.all([
     supabase.from("component_editors").select("person_id").eq("component_id", id),
     supabase.from("files").select("*").eq("component_id", id).is("deleted_at", null).order("created_at", { ascending: false }),
     supabase.from("updates").select("*").eq("component_id", id).order("week_start", { ascending: false }).limit(52),
     supabase.from("comments").select("*").eq("component_id", id).order("created_at"),
+    supabase.from("component_links").select("*").eq("component_id", id).order("created_at"),
   ]);
   const editorIds = (ed ?? []).map((e) => e.person_id as string);
   const editors = editorIds.map((e) => lib.person.get(e)).filter(Boolean);
   const owner = lib.person.get(c.owner_id);
   const mayEdit = canEdit(lib.me, c, editorIds);
+  const links = (linkRows ?? []) as ComponentLink[];
   const isOwner = lib.me.role === "admin" || c.owner_id === lib.me.id;
   const ups = (updates ?? []) as Update[];
   const thisWeek = weekStart();
@@ -153,6 +155,33 @@ export default async function ComponentPage({ params, searchParams }: { params: 
               </div>
             ))}
             {mayEdit && <FileUpload componentId={id} revision={c.revision} />}
+          </section>
+
+          <section className="mc-panel mc-glass">
+            <div className="mc-panel__head"><h2>Links</h2><span className="mc-label">{links.length}</span></div>
+            {links.length === 0 && <p className="muted" style={{ fontSize: 13 }}>Google Drive files, folders, Docs and Sheets, or any other page about this part.</p>}
+            {links.map((l) => (
+              <div key={l.id} className="spread" style={{ gap: 8 }}>
+                <a className="link row" href={l.url} target="_blank" rel="noreferrer noopener" style={{ minWidth: 0, gap: 6 }}><Icon name="external" /><span style={{ overflowWrap: "anywhere" }}>{l.label}</span></a>
+                <span className="row" style={{ gap: 6 }}>
+                  <span className="faint" style={{ fontSize: 12 }}>{lib.person.get(l.added_by)?.name.split(" ")[0]} · {shortDate(l.created_at)}</span>
+                  {mayEdit && (
+                    <form action={removeLink}><input type="hidden" name="id" value={l.id} /><input type="hidden" name="component_id" value={id} /><ConfirmButton className="mc-icon-btn mc-icon-btn--sm" confirmLabel="Remove link"><Icon name="trash" /></ConfirmButton></form>
+                  )}
+                </span>
+              </div>
+            ))}
+            {mayEdit && (
+              <form action={addLink} className="stack-sm">
+                <input type="hidden" name="component_id" value={id} />
+                <input className="input" name="url" type="url" required maxLength={2000} placeholder="https://drive.google.com/…" aria-label="Link" />
+                <div className="row">
+                  <input className="input input--inline" name="label" maxLength={120} placeholder="Name (optional)" aria-label="Link name" style={{ flex: 1 }} />
+                  <button className="mc-btn mc-btn--secondary mc-btn--sm" type="submit">Add link</button>
+                </div>
+                <small className="faint">In Drive, use Share, then Copy link. Teammates need access to the file in Drive to open it.</small>
+              </form>
+            )}
           </section>
 
           {isOwner && (

@@ -33,8 +33,7 @@ export function ComponentNameField({ defaultValue = "", exceptId }: { defaultVal
   );
 }
 
-const MAX = 20 * 1024 * 1024;
-const TYPES: Record<string, string> = { zip: "application/zip", pdf: "application/pdf", png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", webp: "image/webp" };
+const MAX = 50 * 1024 * 1024;
 
 /** Uploads straight from the browser to storage (so big zips don't pass through the server), then records it. */
 export function FileUpload({ componentId, revision }: { componentId: string; revision: string }) {
@@ -52,10 +51,10 @@ export function FileUpload({ componentId, revision }: { componentId: string; rev
     const supabase = createClient();
     let done = 0;
     for (const file of files) {
-      const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
-      const type = TYPES[ext];
-      if (!type) { setMsg({ kind: "error", text: `${file.name}: only .zip, .pdf, .png, .jpg and .webp. Zip KiCad projects first.` }); continue; }
-      if (file.size > MAX) { setMsg({ kind: "error", text: `${file.name} is over 20 MB` }); continue; }
+      // Any kind of file. Downloads always come back as attachments, so the type is only a label.
+      const type = file.type || "application/octet-stream";
+      if (file.size === 0) { setMsg({ kind: "error", text: `${file.name} is empty` }); continue; }
+      if (file.size > MAX) { setMsg({ kind: "error", text: `${file.name} is over 50 MB. Put it in Google Drive and add a link instead.` }); continue; }
       const safe = file.name.replace(/[^\w.\-]+/g, "_").slice(-120);
       const r = (rev.trim() || "A").replace(/[^\w.\-]+/g, "_").slice(0, 12);
       const path = `${componentId}/${r}/${crypto.randomUUID().slice(0, 8)}-${safe}`;
@@ -72,11 +71,11 @@ export function FileUpload({ componentId, revision }: { componentId: string; rev
   return (
     <form onSubmit={upload} className="stack-sm">
       <div className="row">
-        <input ref={input} className="input input--inline" type="file" multiple accept=".zip,.pdf,.png,.jpg,.jpeg,.webp" aria-label="Files to upload" style={{ flex: 1 }} />
+        <input ref={input} className="input input--inline" type="file" multiple aria-label="Files to upload" style={{ flex: 1 }} />
         <input className="input input--inline" style={{ minWidth: 0, width: 80 }} value={rev} onChange={(e) => setRev(e.target.value)} maxLength={12} aria-label="Revision" title="Revision" />
         <button className="mc-btn mc-btn--secondary mc-btn--sm" type="submit" disabled={busy}>{busy ? "Uploading…" : "Upload"}</button>
       </div>
-      <small className="faint">KiCad projects as one .zip. PDFs and images too. Up to 20 MB each.</small>
+      <small className="faint">Any file up to 50 MB: CAD exports, KiCad zips, PDFs, photos, spreadsheets. On an iPhone or iPad, tap Choose Files to pick from the Files app, iCloud Drive or Google Drive.</small>
       {msg && <p className={`notice${msg.kind === "error" ? " notice--error" : ""}`} role={msg.kind === "error" ? "alert" : "status"}>{msg.text}</p>}
     </form>
   );

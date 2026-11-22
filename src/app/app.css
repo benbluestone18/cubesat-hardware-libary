@@ -249,3 +249,8 @@ details.inline { position: relative; }
 .legal a { color: var(--accent-text); }
 .login__legal { font-size: 13px; color: var(--ink-faint); }
 .login__legal a { color: inherit; text-decoration: underline; }
+
+/* A team member, with a menu for leads and admins */
+.member-row { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 4px; }
+.member-row__menu { position: relative; }
+.member-row__menu .popover { right: 0; left: auto; min-width: 180px; }

@@ -12,3 +12,6 @@ export interface Update { id: string; component_id: string; author_id: string; w
 export interface Comment { id: string; component_id: string; author_id: string; body: string; created_at: string; edited_at: string | null }
 export interface FileRow { id: string; component_id: string; revision: string; storage_path: string; filename: string; size_bytes: number; content_type: string; uploaded_by: string; created_at: string; deleted_at: string | null }
 export interface Week { week_start: string; slides_url: string | null; notes: string }
+
+export interface Membership { person_id: string; project_id: string; lead: boolean }
+export interface ComponentLink { id: string; component_id: string; url: string; label: string; added_by: string; created_at: string }

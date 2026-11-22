@@ -16,7 +16,7 @@ export async function createProject(form: FormData) {
   if (!name) back("/projects", "Give the project a name");
   const { data, error } = await supabase.from("projects").insert({ name, description: str(form, "description", 2000), created_by: me }).select("id").single();
   if (error || !data) back("/projects", explain(error));
-  await supabase.from("memberships").insert({ person_id: me, project_id: data.id });
+  await supabase.from("memberships").insert({ person_id: me, project_id: data.id, lead: true });
   revalidatePath("/", "layout");
   redirect(`/projects/${data.id}`);
 }
@@ -59,6 +59,34 @@ export async function leaveProject(form: FormData) {
   await supabase.from("memberships").delete().eq("person_id", me).eq("project_id", id);
   revalidatePath(`/projects/${id}`);
   revalidatePath(`/people/${me}`);
+}
+
+/** Admins and team leads add someone to a team. The database checks who may. */
+export async function addMember(form: FormData) {
+  const { supabase } = await uid();
+  const project_id = str(form, "project_id");
+  const person_id = str(form, "person_id");
+  if (!person_id) back(`/projects/${project_id}`, "Pick someone to add");
+  const { error } = await supabase.from("memberships").insert({ person_id, project_id });
+  if (error && error.code !== "23505") back(`/projects/${project_id}`, explain(error));
+  revalidatePath("/", "layout");
+}
+
+export async function removeMember(form: FormData) {
+  const { supabase } = await uid();
+  const project_id = str(form, "project_id");
+  const { data, error } = await supabase.from("memberships").delete().eq("project_id", project_id).eq("person_id", str(form, "person_id")).select("person_id");
+  if (error || !data?.length) back(`/projects/${project_id}`, error ? explain(error) : "You don't have permission to do that");
+  revalidatePath("/", "layout");
+}
+
+export async function setLead(form: FormData) {
+  const { supabase } = await uid();
+  const project_id = str(form, "project_id");
+  const lead = str(form, "lead") === "true";
+  const { data, error } = await supabase.from("memberships").update({ lead }).eq("project_id", project_id).eq("person_id", str(form, "person_id")).select("person_id");
+  if (error || !data?.length) back(`/projects/${project_id}`, error ? explain(error) : "You don't have permission to do that");
+  revalidatePath("/", "layout");
 }
 
 export async function createFolder(form: FormData) {

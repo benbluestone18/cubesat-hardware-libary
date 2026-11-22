@@ -1,7 +1,7 @@
 -- Permission rules, checked against the real database. Run with: npx supabase test db
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(27);
+select plan(41);
 
 -- Start from an empty library, even when local test data is loaded. All of this rolls back.
 truncate public.activity_log, public.comments, public.updates, public.files, public.component_editors, public.components,
@@ -92,6 +92,37 @@ select pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
 update folders set deleted_at = null where id = '20000000-0000-0000-0000-000000000002';
 select pg_temp.reset_role();
 select ok((select deleted_at is null from folders where id = '20000000-0000-0000-0000-000000000002'), 'The admin can restore it');
+
+-- Teams: leads and admins manage members; anyone can join or leave
+select pg_temp.reset_role();
+insert into auth.users (id, email, raw_user_meta_data) values ('00000000-0000-0000-0000-00000000000d', 'jordan@lgsstudent.org', '{"full_name":"Jordan"}');
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000c');
+insert into projects (id, name) values ('10000000-0000-0000-0000-000000000002', 'Power');
+select lives_ok($$ insert into memberships (person_id, project_id, lead) values ('00000000-0000-0000-0000-00000000000c', '10000000-0000-0000-0000-000000000002', true) $$, 'Whoever makes a project can lead it');
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000d');
+select throws_ok($$ insert into memberships (person_id, project_id, lead) values ('00000000-0000-0000-0000-00000000000d', '10000000-0000-0000-0000-000000000002', true) $$, '42501', null, 'You cannot join as a lead');
+select lives_ok($$ insert into memberships (person_id, project_id) values ('00000000-0000-0000-0000-00000000000d', '10000000-0000-0000-0000-000000000002') $$, 'Anyone can join a team');
+select throws_ok($$ insert into memberships (person_id, project_id) values ('00000000-0000-0000-0000-00000000000b', '10000000-0000-0000-0000-000000000002') $$, '42501', null, 'A member who is not a lead cannot add others');
+update memberships set lead = true where person_id = '00000000-0000-0000-0000-00000000000d';
+select is((select lead from memberships where person_id = '00000000-0000-0000-0000-00000000000d'), false, 'A member cannot make themselves lead');
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000c');
+select lives_ok($$ insert into memberships (person_id, project_id) values ('00000000-0000-0000-0000-00000000000b', '10000000-0000-0000-0000-000000000002') $$, 'A lead can add people');
+select lives_ok($$ update memberships set lead = true where person_id = '00000000-0000-0000-0000-00000000000d' and project_id = '10000000-0000-0000-0000-000000000002' $$, 'A lead can make someone else a lead');
+select throws_ok($$ update memberships set person_id = '00000000-0000-0000-0000-00000000000a' where person_id = '00000000-0000-0000-0000-00000000000d' $$, '42501', null, 'Only the lead flag can change');
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000d');
+delete from memberships where person_id = '00000000-0000-0000-0000-00000000000b' and project_id = '10000000-0000-0000-0000-000000000002';
+select is((select count(*)::int from memberships where person_id = '00000000-0000-0000-0000-00000000000b' and project_id = '10000000-0000-0000-0000-000000000002'), 0, 'A new lead can remove people');
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
+select lives_ok($$ insert into memberships (person_id, project_id, lead) values ('00000000-0000-0000-0000-00000000000b', '10000000-0000-0000-0000-000000000002', true) $$, 'The admin can add anyone as a lead');
+
+-- Links (Google Drive and the like): editors add them, everyone sees them
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000d');
+select throws_ok($$ insert into component_links (component_id, url, label) values ('30000000-0000-0000-0000-000000000001', 'https://drive.google.com/file/d/x', 'Drawing') $$, '42501', null, 'Someone who cannot edit the part cannot add links');
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000b');
+select lives_ok($$ insert into component_links (component_id, url, label) values ('30000000-0000-0000-0000-000000000001', 'https://drive.google.com/file/d/x', 'Drawing') $$, 'The owner can add a link');
+select throws_ok($$ insert into component_links (component_id, url, label) values ('30000000-0000-0000-0000-000000000001', 'javascript:alert(1)', 'Bad') $$, '23514', null, 'Only https links are allowed');
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000d');
+select is((select count(*)::int from component_links), 1, 'Everyone can see links');
 
 -- Search, activity, signed-out
 select ok((select count(*) from search_library('wheel')) >= 2, 'Search finds the component and its folder');
