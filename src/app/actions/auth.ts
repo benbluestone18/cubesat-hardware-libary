@@ -42,5 +42,5 @@ export async function signInWithEmail(form: FormData) {
   const supabase = await createClient();
   const { error } = await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: callback(await origin(), next) } });
   if (error) retry(error.status === 429 ? "Too many emails. Wait a minute and try again." : "Couldn't send the email. Wait a minute and try again, or tell the admin.");
-  retry(`Check ${email} for a sign-in link`, "ok");
+  retry(`Check ${email} for a sign-in link. Look in spam too.`, "ok");
 }
