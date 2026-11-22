@@ -44,5 +44,5 @@ Do these in order. **Sign in yourself first** in step 4: the first person to sig
 ## Limits worth knowing
 
 - Supabase free: 500 MB database, 1 GB file storage, 20 MB per file here, no automatic backups (hence the Action).
-- Email-link sign-in needs your own email sender in production (Supabase's built-in one only sends a few emails an hour), so production uses Google only.
+- Email-link sign-in needs your own email sender in production (Supabase's built-in one only sends a few emails an hour). Set up custom SMTP (for example Brevo) under Authentication → Emails → SMTP Settings, set `NEXT_PUBLIC_EMAIL_SIGNIN=on` in Vercel, and paste `supabase/templates/magic_link.html` and `supabase/templates/confirm_signup.html` into the **Magic link** and **Confirm signup** templates. Those templates send people to `/auth/confirm`, so a link works on any device for an hour.
 - Onshape links open in Onshape. The school's Onshape documents are private, so teammates need access there too.
