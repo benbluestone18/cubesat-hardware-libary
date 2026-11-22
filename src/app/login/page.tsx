@@ -1,4 +1,7 @@
 import type { Metadata } from "next";
+import Image from "next/image";
+import Link from "next/link";
+import photo from "../../../public/login/cubesats-iss.jpg";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { SCHOOL_DOMAIN, emailSignInEnabled } from "@/lib/env";
@@ -30,33 +33,41 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
     : sp.error;
 
   return (
-    <div className="mc-ambient login">
-      <main className="login__card mc-glass mc-glass--strong">
-        <div className="stack-sm">
-          <span className="mc-label">LG CubeSat · Hardware</span>
-          <h1>Hardware Library</h1>
-          <p className="muted">Every part, file and weekly update for the satellite, in one place. Sign in with your school Google account.</p>
+    <div className="login">
+      <section className="login__scene">
+        <Image src={photo} alt="Two CubeSats drifting away from the International Space Station, high above Earth" fill priority placeholder="blur" sizes="(max-width: 860px) 100vw, 55vw" className="login__photo" />
+        <p className="login__credit">Photo: NASA</p>
+      </section>
+      <div className="login__intro">
+        <p className="login__mark">LG CubeSat</p>
+        <h1>Hardware<br />Library</h1>
+        <p className="login__lede">Every part, file and weekly update for the satellite, in one place.</p>
+      </div>
+      <main className="login__panel">
+        <div className="login__form">
+          <h2>Sign in</h2>
+          <p className="muted">Use your @{SCHOOL_DOMAIN} Google account. The first time you sign in, your profile is made for you.</p>
+          {error && <p className="notice notice--error" role="alert">{error}</p>}
+          {sp.ok && <p className="notice" role="status">{sp.ok}</p>}
+          <form action={signInWithGoogle}>
+            <input type="hidden" name="next" value={next} />
+            <button className="btn-google" type="submit"><GoogleMark /> Continue with Google</button>
+          </form>
+          {emailSignInEnabled() && (
+            <>
+              <div className="or">or get a link by email</div>
+              <form action={signInWithEmail} className="stack-sm">
+                <input type="hidden" name="next" value={next} />
+                <label className="field">
+                  <span>School email</span>
+                  <input className="input" type="email" name="email" required autoComplete="email" placeholder={`you@${SCHOOL_DOMAIN}`} pattern={`.+@${SCHOOL_DOMAIN.replace(/\./g, "\\.")}$`} title={`Use your @${SCHOOL_DOMAIN} email`} />
+                </label>
+                <button className="mc-btn mc-btn--secondary" type="submit">Email me a link</button>
+              </form>
+            </>
+          )}
+          <p className="login__legal"><Link href="/privacy">Privacy</Link> and <Link href="/terms">terms</Link></p>
         </div>
-        {error && <p className="notice notice--error" role="alert">{error}</p>}
-        {sp.ok && <p className="notice" role="status">{sp.ok}</p>}
-        <form action={signInWithGoogle}>
-          <input type="hidden" name="next" value={next} />
-          <button className="mc-btn mc-btn--primary btn-google" type="submit"><GoogleMark /> Continue with Google</button>
-        </form>
-        {emailSignInEnabled() && (
-          <>
-            <div className="or">or get a link by email</div>
-            <form action={signInWithEmail} className="stack-sm">
-              <input type="hidden" name="next" value={next} />
-              <label className="field">
-                <span>School email</span>
-                <input className="input" type="email" name="email" required autoComplete="email" placeholder={`you@${SCHOOL_DOMAIN}`} pattern={`.+@${SCHOOL_DOMAIN.replace(/\./g, "\\.")}$`} title={`Use your @${SCHOOL_DOMAIN} email`} />
-              </label>
-              <button className="mc-btn mc-btn--secondary" type="submit">Email me a link</button>
-            </form>
-          </>
-        )}
-        <p className="faint" style={{ fontSize: 12 }}>Only @{SCHOOL_DOMAIN} accounts can get in.</p>
       </main>
     </div>
   );

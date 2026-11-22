@@ -41,6 +41,6 @@ export async function signInWithEmail(form: FormData) {
   if (!email.endsWith("@" + SCHOOL_DOMAIN)) retry(`Use your @${SCHOOL_DOMAIN} school email`);
   const supabase = await createClient();
   const { error } = await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: callback(await origin(), next) } });
-  if (error) retry(error.status === 429 ? "Too many emails. Wait a minute and try again." : "Couldn't send the email. Try Google instead.");
+  if (error) retry(error.status === 429 ? "Too many emails. Wait a minute and try again." : "Couldn't send the email. Wait a minute and try again, or tell the admin.");
   retry(`Check ${email} for a sign-in link`, "ok");
 }
