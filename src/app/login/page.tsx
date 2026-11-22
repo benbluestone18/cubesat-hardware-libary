@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Image from "next/image";
+import Link from "next/link";
 import photo from "../../../public/login/cubesats-iss.jpg";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
@@ -65,6 +66,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
               </form>
             </>
           )}
+          <p className="login__legal"><Link href="/privacy">Privacy</Link></p>
         </div>
       </main>
     </div>
