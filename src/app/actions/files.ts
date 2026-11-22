@@ -25,6 +25,6 @@ export async function trashFile(form: FormData) {
   const supabase = await createClient();
   const component_id = str(form, "component_id");
   const { error } = await supabase.from("files").update({ deleted_at: new Date().toISOString() }).eq("id", str(form, "id")).select("id").single();
-  if (error) back(`/components/${component_id}`, explain(error.code === "PGRST116" ? { message: "x", code: "42501" } : error));
+  if (error) back(`/components/${component_id}`, explain(error));
   revalidatePath(`/components/${component_id}`);
 }

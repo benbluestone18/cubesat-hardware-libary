@@ -1,7 +1,7 @@
 -- Permission rules, checked against the real database. Run with: npx supabase test db
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(25);
+select plan(27);
 
 -- Start from an empty library, even when local test data is loaded. All of this rolls back.
 truncate public.activity_log, public.comments, public.updates, public.files, public.component_editors, public.components,
@@ -98,6 +98,10 @@ select ok((select count(*) from search_library('wheel')) >= 2, 'Search finds the
 select ok((select count(*) from activity_log where action in ('trashed','restored') and entity = 'folders') = 2, 'Trashing and restoring are logged');
 select pg_temp.reset_role();
 select ok((select last_update_at is not null from components where id = '30000000-0000-0000-0000-000000000001'), 'Posting an update refreshes the component');
+insert into updates (component_id, author_id, week_start, done) values
+  ('30000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-00000000000b', date_trunc('week', now())::date - 7, 'older');
+select is((select done from latest_updates where component_id = '30000000-0000-0000-0000-000000000001'), (select done from updates where component_id = '30000000-0000-0000-0000-000000000001' order by week_start desc limit 1), 'latest_updates picks the newest week');
+select is((select count(*)::int from latest_updates where component_id = '30000000-0000-0000-0000-000000000001'), 1, 'latest_updates has one row per component');
 set local role anon;
 select throws_ok($$ select count(*) from components $$, '42501', null, 'Signed-out visitors see nothing');
 

@@ -34,7 +34,7 @@ function descendants(folders: Folder[], id: string): Set<string> {
 
 function Task({ c, lib }: { c: ComponentWithHealth; lib: Library }) {
   const owner = lib.person.get(c.owner_id);
-  const folder = c.folder_id ? lib.path(c).split(" / ").slice(1).join(" / ") : "";
+  const folder = c.folder_id ? lib.folderPath(c.project_id, c.folder_id) : "";
   return (
     <Link className={`mc-task${c.health.health === "stalled" ? " mc-task--stalled" : ""}`} href={`/components/${c.id}`}>
       {owner ? <Face person={owner} size={32} link={false} /> : <span />}
@@ -72,7 +72,7 @@ function Tree({ parent, folders, comps, lib, projectId, all }: { parent: string 
                       <input className="input input--inline" name="name" defaultValue={f.name} maxLength={80} aria-label="Folder name" />
                       <select className="select input--inline" name="parent_id" defaultValue={f.parent_id ?? ""} aria-label="Move into">
                         <option value="">Top level</option>
-                        {all.filter((o) => !blocked.has(o.id)).map((o) => <option key={o.id} value={o.id}>{lib.path({ project_id: projectId, folder_id: o.id }).split(" / ").slice(1).join(" / ")}</option>)}
+                        {all.filter((o) => !blocked.has(o.id)).map((o) => <option key={o.id} value={o.id}>{lib.folderPath(projectId, o.id)}</option>)}
                       </select>
                       <button className="mc-btn mc-btn--secondary mc-btn--sm" type="submit">Rename or move</button>
                     </form>

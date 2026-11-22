@@ -1,5 +1,6 @@
 "use server";
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { back, explain, str } from "./util";
 
@@ -37,6 +38,5 @@ export async function setRole(form: FormData) {
 export async function signOut() {
   const supabase = await createClient();
   await supabase.auth.signOut();
-  const { redirect } = await import("next/navigation");
   redirect("/login");
 }

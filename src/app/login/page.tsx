@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { SCHOOL_DOMAIN, emailSignInEnabled } from "@/lib/env";
 import { signInWithEmail, signInWithGoogle } from "@/app/actions/auth";
+import { safePath } from "@/app/actions/util";
 
 export const metadata: Metadata = { title: "Sign in" };
 
@@ -19,7 +20,7 @@ function GoogleMark() {
 
 export default async function LoginPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const sp = await searchParams;
-  const next = sp.next && sp.next.startsWith("/") && !sp.next.startsWith("//") ? sp.next : "/";
+  const next = safePath(sp.next);
   const supabase = await createClient();
   const { data } = await supabase.auth.getClaims();
   if (data?.claims?.sub && !sp.error) redirect(next);

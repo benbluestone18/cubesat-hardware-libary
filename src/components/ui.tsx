@@ -32,10 +32,6 @@ export function HealthState({ h }: { h: HealthResult }) {
   return <State health={h.health} label={label} />;
 }
 
-export function Badge({ health, children }: { health: Health; children: React.ReactNode }) {
-  return <span className={`mc-badge mc-badge--${health === "warn" ? "warn" : health === "planned" ? "planned" : health}`}><StatusIcon health={health} />{children}</span>;
-}
-
 /** Five-step lifecycle track: Planned, In design, In review, Released, Built. */
 export function Track({ status, health }: { status: ComponentStatus; health: Health }) {
   const step = STATUS_STEP[status];

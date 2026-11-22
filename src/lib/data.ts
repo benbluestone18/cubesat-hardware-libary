@@ -34,22 +34,14 @@ export type ComponentWithHealth = Component & { health: HealthResult; latest: Up
 export async function withHealth(components: Component[]): Promise<ComponentWithHealth[]> {
   if (components.length === 0) return [];
   const supabase = await createClient();
-  const { data } = await supabase
-    .from("updates")
-    .select("*")
-    .in("component_id", components.map((c) => c.id))
-    .order("week_start", { ascending: false });
-  const latest = new Map<string, Update>();
-  for (const u of (data ?? []) as Update[]) if (!latest.has(u.component_id)) latest.set(u.component_id, u);
+  const { data } = await supabase.from("latest_updates").select("*").in("component_id", components.map((c) => c.id));
+  const latest = new Map(((data ?? []) as Update[]).map((u) => [u.component_id, u]));
   return components.map((c) => {
     const l = latest.get(c.id) ?? null;
     return { ...c, latest: l, health: componentHealth({ ...c, latest_blocked: l?.blocked }) };
   });
 }
 
-export function peopleById(people: Person[]): Map<string, Person> {
-  return new Map(people.map((p) => [p.id, p]));
-}
 
 export const getFolders = cache(async (): Promise<Folder[]> => {
   const supabase = await createClient();
@@ -87,8 +79,10 @@ export async function getLibrary() {
   const live = components.filter((c) => P.has(c.project_id));
   return {
     me, people, projects, folders, components: live,
-    person: peopleById(people), project: P, folder: F,
+    person: byId(people), project: P, folder: F,
     path: (c: Pick<Component, "project_id" | "folder_id">) => pathOf(c.project_id, c.folder_id, P, F),
+    /** The folder part alone: "Sensors / Sun sensors". */
+    folderPath: (projectId: string, folderId: string) => pathOf(projectId, folderId, P, F).split(" / ").slice(1).join(" / "),
   };
 }
 
@@ -99,11 +93,10 @@ export function canEdit(me: Person, c: Pick<Component, "owner_id">, editorIds: s
 export type Library = Awaited<ReturnType<typeof getLibrary>>;
 
 /** Recent updates on live components, newest first. */
-export async function recentUpdates(lib: Library, opts: { limit?: number; authorId?: string; componentIds?: string[]; week?: string } = {}): Promise<Update[]> {
+export async function recentUpdates(lib: Library, opts: { limit?: number; authorId?: string; week?: string } = {}): Promise<Update[]> {
   const supabase = await createClient();
   let q = supabase.from("updates").select("*").order("created_at", { ascending: false }).limit(opts.limit ?? 30);
   if (opts.authorId) q = q.eq("author_id", opts.authorId);
-  if (opts.componentIds) q = q.in("component_id", opts.componentIds.length ? opts.componentIds : ["00000000-0000-0000-0000-000000000000"]);
   if (opts.week) q = q.eq("week_start", opts.week);
   const { data } = await q;
   const live = new Set(lib.components.map((c) => c.id));
@@ -113,9 +106,8 @@ export async function recentUpdates(lib: Library, opts: { limit?: number; author
 /** Each person's freshness from their latest update, plus what they own. */
 export async function peopleHealth(lib: Library) {
   const supabase = await createClient();
-  const { data } = await supabase.from("updates").select("author_id, created_at").order("created_at", { ascending: false }).limit(1000);
-  const latest = new Map<string, string>();
-  for (const u of data ?? []) if (!latest.has(u.author_id)) latest.set(u.author_id, u.created_at);
+  const { data } = await supabase.from("latest_update_by_author").select("author_id, created_at");
+  const latest = new Map((data ?? []).map((u) => [u.author_id as string, u.created_at as string]));
   return lib.people.map((p) => {
     const owned = lib.components.filter((c) => c.owner_id === p.id);
     const active = owned.filter((c) => c.status !== "released" && c.status !== "built");

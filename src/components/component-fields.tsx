@@ -6,7 +6,7 @@ import { ComponentNameField } from "./forms";
 /** The fields shared by the new and edit forms. */
 export function ComponentFields({ lib, projectId, c, folderId }: { lib: Library; projectId: string; c?: Component; folderId?: string | null }) {
   const folders = lib.folders.filter((f) => f.project_id === projectId);
-  const label = (id: string) => lib.path({ project_id: projectId, folder_id: id }).split(" / ").slice(1).join(" / ");
+  const label = (id: string) => lib.folderPath(projectId, id);
   return (
     <>
       <ComponentNameField defaultValue={c?.name} exceptId={c?.id} />

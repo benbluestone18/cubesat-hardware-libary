@@ -53,7 +53,7 @@ export async function updateComponent(form: FormData) {
     name: str(form, "name", 120), description: str(form, "description", 4000), status: status(str(form, "status")),
     onshape_url: link, revision: str(form, "revision", 12) || "A", folder_id: optional(form, "folder_id"),
   }).eq("id", id).select("id").single();
-  if (error) back(`/components/${id}/edit`, explain(error.code === "PGRST116" ? { message: "x", code: "42501" } : error));
+  if (error) back(`/components/${id}/edit`, explain(error));
   revalidatePath("/", "layout");
   back(`/components/${id}`, "Saved", "ok");
 }
@@ -62,7 +62,7 @@ export async function setStatus(form: FormData) {
   const { supabase } = await ctx();
   const id = str(form, "id");
   const { error } = await supabase.from("components").update({ status: status(str(form, "status")) }).eq("id", id).select("id").single();
-  if (error) back(`/components/${id}`, explain(error.code === "PGRST116" ? { message: "x", code: "42501" } : error));
+  if (error) back(`/components/${id}`, explain(error));
   revalidatePath("/", "layout");
 }
 
@@ -70,7 +70,7 @@ export async function trashComponent(form: FormData) {
   const { supabase } = await ctx();
   const id = str(form, "id");
   const { data, error } = await supabase.from("components").update({ deleted_at: new Date().toISOString() }).eq("id", id).select("project_id").single();
-  if (error || !data) back(`/components/${id}`, explain(error?.code === "PGRST116" ? { message: "x", code: "42501" } : error));
+  if (error || !data) back(`/components/${id}`, explain(error));
   revalidatePath("/", "layout");
   back(`/projects/${data.project_id}`, "Moved the component to trash. The admin can restore it.", "ok");
 }
@@ -99,7 +99,7 @@ export async function handOff(form: FormData) {
   const to = str(form, "person_id");
   if (!to) back(`/components/${id}`, "Pick the new owner");
   const { error } = await supabase.from("components").update({ owner_id: to }).eq("id", id).select("id").single();
-  if (error) back(`/components/${id}`, explain(error.code === "PGRST116" ? { message: "x", code: "42501" } : error));
+  if (error) back(`/components/${id}`, explain(error));
   revalidatePath("/", "layout");
   back(`/components/${id}`, "Handed off", "ok");
 }

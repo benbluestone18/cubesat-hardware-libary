@@ -22,8 +22,7 @@ export default async function Feed({ searchParams }: { searchParams: SP }) {
   const active = lib.components.filter((c) => c.status !== "released" && c.status !== "built");
   const alerts = active.filter((c) => c.health.health === "stalled" || c.health.health === "warn").sort(byUrgency);
   const mine = active.filter((c) => c.owner_id === lib.me.id);
-  const updatedThisWeek = new Set(updates.filter((u) => u.week_start === thisWeek).map((u) => u.component_id));
-  const myTodo = mine.filter((c) => c.status !== "on_hold" && !updatedThisWeek.has(c.id) && (c.latest?.week_start ?? "") !== thisWeek);
+  const myTodo = mine.filter((c) => c.status !== "on_hold" && c.latest?.week_start !== thisWeek);
 
   const counts = lib.components.reduce<Record<Health, number>>((n, c) => ({ ...n, [c.health.health]: n[c.health.health] + 1 }), { done: 0, working: 0, warn: 0, stalled: 0, planned: 0 });
   const order: Health[] = ["done", "working", "warn", "stalled", "planned"];
