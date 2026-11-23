@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { canEdit, getLibrary } from "@/lib/data";
+import { canEdit, canManagePart, getLibrary, getMemberships } from "@/lib/data";
 import { createClient } from "@/lib/supabase/server";
 import { trashComponent, updateComponent } from "@/app/actions/components";
 import { ComponentFields } from "@/components/component-fields";
@@ -13,21 +13,21 @@ export const metadata: Metadata = { title: "Edit component" };
 export default async function EditComponent({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: SP }) {
   const { id } = await params;
   const sp = await searchParams;
-  const lib = await getLibrary();
+  const [lib, memberships] = await Promise.all([getLibrary(), getMemberships()]);
   const c = lib.components.find((x) => x.id === id);
   if (!c) notFound();
   const supabase = await createClient();
   const { data: ed } = await supabase.from("component_editors").select("person_id").eq("component_id", id);
   const editorIds = (ed ?? []).map((e) => e.person_id as string);
-  const mayEdit = canEdit(lib.me, c, editorIds);
-  const isOwner = lib.me.role === "admin" || c.owner_id === lib.me.id;
+  const mayEdit = canEdit(lib.me, c, editorIds, memberships);
+  const isOwner = canManagePart(lib.me, c, memberships);
 
   return (
     <>
       <PageTitle eyebrow={<><Link href={`/components/${id}`}>{c.name}</Link><span>/</span></>} title="Edit component" />
       <Flash sp={sp} />
       {!mayEdit ? (
-        <p className="notice notice--warn">Only {lib.person.get(c.owner_id)?.name ?? "the owner"}, their editors and the admin can change this part. You can still leave a comment.</p>
+        <p className="notice notice--warn">Only {lib.person.get(c.owner_id)?.name ?? "the owner"}, their editors, the team&apos;s leads and admins can change this part. You can still leave a comment.</p>
       ) : (
         <form action={updateComponent} className="form mc-panel mc-glass">
           <input type="hidden" name="id" value={id} />
@@ -41,7 +41,7 @@ export default async function EditComponent({ params, searchParams }: { params: 
       {isOwner && (
         <form action={trashComponent} className="mc-panel mc-glass form">
           <input type="hidden" name="id" value={id} />
-          <p className="muted" style={{ fontSize: 13 }}>Trashing hides the part, its files and its updates. The admin can bring it back from the trash.</p>
+          <p className="muted" style={{ fontSize: 13 }}>Trashing hides the part, its files and its updates. The team&apos;s leads and admins can bring it back from the trash.</p>
           <div><ConfirmButton confirmLabel={`Yes, trash ${c.name}`}>Move to trash</ConfirmButton></div>
         </form>
       )}

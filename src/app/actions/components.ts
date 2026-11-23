@@ -72,7 +72,7 @@ export async function trashComponent(form: FormData) {
   const { data, error } = await supabase.from("components").update({ deleted_at: new Date().toISOString() }).eq("id", id).select("project_id").single();
   if (error || !data) back(`/components/${id}`, explain(error));
   revalidatePath("/", "layout");
-  back(`/projects/${data.project_id}`, "Moved the component to trash. The admin can restore it.", "ok");
+  back(`/projects/${data.project_id}`, "Moved the component to trash. The team's leads and admins can restore it.", "ok");
 }
 
 export async function addEditor(form: FormData) {

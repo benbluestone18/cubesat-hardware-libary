@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { getLibrary } from "@/lib/data";
+import { canEdit, getLibrary, getMemberships } from "@/lib/data";
 import { createClient } from "@/lib/supabase/server";
 import { weekLabel, weekRange, weekStart } from "@/lib/week";
 import type { Update } from "@/lib/types";
@@ -12,11 +12,11 @@ export const metadata: Metadata = { title: "Post update" };
 
 export default async function NewUpdate({ searchParams }: { searchParams: SP }) {
   const sp = await searchParams;
-  const lib = await getLibrary();
+  const [lib, memberships] = await Promise.all([getLibrary(), getMemberships()]);
   const supabase = await createClient();
   const { data: ed } = await supabase.from("component_editors").select("component_id").eq("person_id", lib.me.id);
   const editable = new Set((ed ?? []).map((e) => e.component_id as string));
-  const mine = lib.components.filter((c) => lib.me.role === "admin" || c.owner_id === lib.me.id || editable.has(c.id));
+  const mine = lib.components.filter((c) => canEdit(lib.me, c, editable.has(c.id) ? [lib.me.id] : [], memberships));
   // Your own parts first, then the ones you help on.
   mine.sort((a, b) => Number(b.owner_id === lib.me.id) - Number(a.owner_id === lib.me.id) || a.name.localeCompare(b.name));
   const week = weekStart();
