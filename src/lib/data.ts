@@ -31,11 +31,8 @@ export const getProjects = cache(async (): Promise<Project[]> => {
 export type ComponentWithHealth = Component & { health: HealthResult; latest: Update | null };
 
 /** Components with their latest update and freshness. */
-export async function withHealth(components: Component[]): Promise<ComponentWithHealth[]> {
-  if (components.length === 0) return [];
-  const supabase = await createClient();
-  const { data } = await supabase.from("latest_updates").select("*").in("component_id", components.map((c) => c.id));
-  const latest = new Map(((data ?? []) as Update[]).map((u) => [u.component_id, u]));
+function withHealth(components: Component[], latestRows: Update[]): ComponentWithHealth[] {
+  const latest = new Map(latestRows.map((u) => [u.component_id, u]));
   return components.map((c) => {
     const l = latest.get(c.id) ?? null;
     return { ...c, latest: l, health: componentHealth({ ...c, latest_blocked: l?.blocked }) };
@@ -49,11 +46,18 @@ export const getFolders = cache(async (): Promise<Folder[]> => {
   return (data ?? []) as Folder[];
 });
 
-/** Every live component, with health. Small team, so one query is fine. */
+/**
+ * Every live component, with health. Small team, so one query is fine.
+ * The latest-update query runs at the same time as the components query, not after it:
+ * each round trip to the database costs 25 to 60 ms, and pages used to wait for both in a row.
+ */
 export const getComponents = cache(async (): Promise<ComponentWithHealth[]> => {
   const supabase = await createClient();
-  const { data } = await supabase.from("components").select("*").is("deleted_at", null).order("name");
-  return withHealth((data ?? []) as Component[]);
+  const [{ data }, { data: latest }] = await Promise.all([
+    supabase.from("components").select("*").is("deleted_at", null).order("name"),
+    supabase.from("latest_updates").select("*"),
+  ]);
+  return withHealth((data ?? []) as Component[], (latest ?? []) as Update[]);
 });
 
 /** "ADCS / Reaction wheels / Mounts": the project, then each folder down to this one. */
@@ -70,8 +74,8 @@ export function byId<T extends { id: string }>(rows: T[]): Map<string, T> {
   return new Map(rows.map((r) => [r.id, r]));
 }
 
-/** Everything a page needs to name and place components. */
-export async function getLibrary() {
+/** Everything a page needs to name and place components. Cached for one request, so pages and metadata share it. */
+export const getLibrary = cache(async () => {
   const [me, people, projects, folders, components] = await Promise.all([getMe(), getPeople(), getProjects(), getFolders(), getComponents()]);
   const P = byId(projects);
   const F = byId(folders);
@@ -84,7 +88,7 @@ export async function getLibrary() {
     /** The folder part alone: "Sensors / Sun sensors". */
     folderPath: (projectId: string, folderId: string) => pathOf(projectId, folderId, P, F).split(" / ").slice(1).join(" / "),
   };
-}
+});
 
 /** Leads of a team: what an admin can do, but only inside that team's project. */
 export function leadsTeam(me: Person, projectId: string, memberships: Membership[]): boolean {
@@ -103,21 +107,28 @@ export function canManagePart(me: Person, c: Pick<Component, "owner_id" | "proje
 
 export type Library = Awaited<ReturnType<typeof getLibrary>>;
 
+/**
+ * The helpers below take the library or the promise of it. Each starts its own query first and only then waits
+ * for the library, so a page can run every query in one round trip instead of two in a row:
+ *   const lib = getLibrary(); const [l, updates] = await Promise.all([lib, recentUpdates(lib)]);
+ */
+type LibraryArg = Library | Promise<Library>;
+
 /** Recent updates on live components, newest first. */
-export async function recentUpdates(lib: Library, opts: { limit?: number; authorId?: string; week?: string } = {}): Promise<Update[]> {
+export async function recentUpdates(libArg: LibraryArg, opts: { limit?: number; authorId?: string; week?: string } = {}): Promise<Update[]> {
   const supabase = await createClient();
   let q = supabase.from("updates").select("*").order("created_at", { ascending: false }).limit(opts.limit ?? 30);
   if (opts.authorId) q = q.eq("author_id", opts.authorId);
   if (opts.week) q = q.eq("week_start", opts.week);
-  const { data } = await q;
+  const [{ data }, lib] = await Promise.all([q, libArg]);
   const live = new Set(lib.components.map((c) => c.id));
   return ((data ?? []) as Update[]).filter((u) => live.has(u.component_id));
 }
 
 /** Each person's freshness from their latest update, plus what they own. */
-export async function peopleHealth(lib: Library) {
+export async function peopleHealth(libArg: LibraryArg) {
   const supabase = await createClient();
-  const { data } = await supabase.from("latest_update_by_author").select("author_id, created_at");
+  const [{ data }, lib] = await Promise.all([supabase.from("latest_update_by_author").select("author_id, created_at"), libArg]);
   const latest = new Map((data ?? []).map((u) => [u.author_id as string, u.created_at as string]));
   return lib.people.map((p) => {
     const owned = lib.components.filter((c) => c.owner_id === p.id);
@@ -138,17 +149,22 @@ export function canManageTeam(me: Person, projectId: string, memberships: Member
 }
 
 /** Open issues on live parts, newest first. */
-export async function openIssues(lib: Library): Promise<Comment[]> {
+export async function openIssues(libArg: LibraryArg): Promise<Comment[]> {
   const supabase = await createClient();
-  const { data } = await supabase.from("comments").select("*").eq("is_issue", true).is("resolved_at", null).order("created_at", { ascending: false });
+  const [{ data }, lib] = await Promise.all([
+    supabase.from("comments").select("*").eq("is_issue", true).is("resolved_at", null).order("created_at", { ascending: false }),
+    libArg,
+  ]);
   const live = new Set(lib.components.map((c) => c.id));
   return ((data ?? []) as Comment[]).filter((c) => live.has(c.component_id));
 }
 
 /** Comments that mention me, newest first. */
-export async function myMentions(lib: Library, limit = 10): Promise<Comment[]> {
+export async function myMentions(libArg: LibraryArg, limit = 10): Promise<Comment[]> {
   const supabase = await createClient();
-  const { data } = await supabase.from("comment_mentions").select("comments(*)").eq("person_id", lib.me.id);
+  // Needs only my id, which getMe already has (and caches), not the whole library.
+  const me = await getMe();
+  const [{ data }, lib] = await Promise.all([supabase.from("comment_mentions").select("comments(*)").eq("person_id", me.id), libArg]);
   const live = new Set(lib.components.map((c) => c.id));
   return ((data ?? []).map((r) => r.comments as unknown as Comment).filter((c) => c && live.has(c.component_id)))
     .sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, limit);

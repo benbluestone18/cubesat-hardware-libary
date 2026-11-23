@@ -133,8 +133,8 @@ async function projectTrash(projectId: string, liveIds: string[]): Promise<Trash
 export default async function ProjectPage({ params, searchParams }: { params: Params; searchParams: SP }) {
   const { id } = await params;
   const sp = await searchParams;
-  const lib = await getLibrary();
-  const [memberships, issues] = await Promise.all([getMemberships(), openIssues(lib)]);
+  const libP = getLibrary();
+  const [lib, memberships, issues] = await Promise.all([libP, getMemberships(), openIssues(libP)]);
   const project = lib.project.get(id);
   if (!project) notFound();
   const issuesOn = (cid: string) => issues.filter((m) => m.component_id === cid).length;

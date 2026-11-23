@@ -293,6 +293,8 @@ body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--f
 @keyframes mc-fan-l { from { translate: 250px 0; opacity: 0; } }
 @keyframes mc-fan-r { from { translate: -250px 0; opacity: 0; } }
 .mc-js [data-reveal]:not(.is-in) { opacity: 0; }
+/* Pages reached by a click skip the reveal (see Motion in components/client.tsx). */
+.mc-instant, .mc-instant *:not(.spinner) { animation: none !important; }
 .mc-js [data-reveal].is-in { animation: mc-rise .7s var(--ease-out) backwards; animation-delay: calc(var(--i, 0) * 70ms); transform-origin: 50% 100%; }
 .mc-js [data-reveal="pop"].is-in { animation-name: mc-pop; animation-duration: .5s; animation-timing-function: var(--ease-spring); animation-delay: calc(var(--i, 0) * 40ms); }
 /* Inside a revealed block: progress fills from the left, segment by segment. */
