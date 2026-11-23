@@ -16,7 +16,7 @@ export default function PrivacyPage() {
       <h2>What we keep</h2>
       <ul>
         <li>From your Google account, when you sign in: your name, school email address and profile photo. Nothing else is requested from Google.</li>
-        <li>What you add: components, files you upload, weekly updates and comments.</li>
+        <li>What you add: components, files you upload, weekly updates, comments and meeting notes.</li>
         <li>A record of changes (who added, edited or deleted what, and when), so the team can see and undo mistakes.</li>
         <li>Your light or dark theme choice.</li>
       </ul>

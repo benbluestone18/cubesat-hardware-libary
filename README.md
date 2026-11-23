@@ -9,6 +9,7 @@ Built with Next.js 16 on Vercel and Supabase (database, sign-in, file storage). 
 - **Projects** are hardware areas (ADCS, Biomission, EPS…). Anyone can create and edit projects and folders. Folders nest.
 - **Components** belong to one owner. The owner, people they add as editors, and the admin can change a component, post its updates and upload files. Anyone can comment.
 - **Weekly updates** are three lines per component: done, next and blocked. A component goes amber after 7 days without an update and red after 14, or red at once when its latest update lists a blocker.
+- **Weekly meetings** have a page per week with the slides link and every update from that week.
 - **Trash**: deleting moves things to the trash. Only the admin can restore. Every change is in the activity log on the Admin page.
 - The permission rules live in the database (`supabase/migrations`), so they hold even if someone calls the API directly. `supabase/tests/permissions.test.sql` checks them.
 
