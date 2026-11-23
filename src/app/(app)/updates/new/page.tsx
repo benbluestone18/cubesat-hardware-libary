@@ -40,7 +40,7 @@ export default async function NewUpdate({ searchParams }: { searchParams: SP }) 
         <form method="get" className="form mc-panel mc-glass">
           <label className="field"><span>Which part?</span>
             <select className="select" name="component" required defaultValue="">
-              <option value="" disabled>Pick a component</option>
+              <option value="" disabled>Pick a part</option>
               {mine.map((c) => <option key={c.id} value={c.id}>{c.name} · {lib.path(c)}</option>)}
             </select>
           </label>

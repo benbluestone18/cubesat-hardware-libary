@@ -76,11 +76,15 @@ export function byId<T extends { id: string }>(rows: T[]): Map<string, T> {
 
 /** Everything a page needs to name and place components. Cached for one request, so pages and metadata share it. */
 export const getLibrary = cache(async () => {
-  const [me, people, projects, folders, components] = await Promise.all([getMe(), getPeople(), getProjects(), getFolders(), getComponents()]);
+  const [me, people, projects, liveFolders, components] = await Promise.all([getMe(), getPeople(), getProjects(), getFolders(), getComponents()]);
   const P = byId(projects);
+  // A trashed folder keeps its parts and subfolders: until it is restored they sit at the top of the project,
+  // so nothing vanishes from the Library. The database still remembers where they were.
+  const ids = new Set(liveFolders.map((f) => f.id));
+  const folders = liveFolders.map((f) => (f.parent_id && !ids.has(f.parent_id) ? { ...f, parent_id: null } : f));
   const F = byId(folders);
   // Components in a trashed project are hidden everywhere.
-  const live = components.filter((c) => P.has(c.project_id));
+  const live = components.filter((c) => P.has(c.project_id)).map((c) => (c.folder_id && !ids.has(c.folder_id) ? { ...c, folder_id: null } : c));
   return {
     me, people, projects, folders, components: live,
     person: byId(people), project: P, folder: F,
@@ -175,3 +179,13 @@ export async function getMission(): Promise<Mission> {
   const { data } = await supabase.from("mission").select("mass_limit_g, power_limit_w").maybeSingle();
   return (data ?? { mass_limit_g: null, power_limit_w: null }) as Mission;
 }
+
+/**
+ * Names people used before they renamed themselves, so "@Old Name" in an older comment still links to them.
+ * Read from the activity log; renames from before the log kept old names aren't known.
+ */
+export const nameAliases = cache(async (): Promise<{ id: string; name: string }[]> => {
+  const supabase = await createClient();
+  const { data } = await supabase.from("activity_log").select("entity_id, detail").eq("entity", "people").not("detail->>old_name", "is", null).limit(500);
+  return (data ?? []).map((r) => ({ id: r.entity_id as string, name: String((r.detail as { old_name?: string }).old_name ?? "") })).filter((a) => a.id && a.name);
+});

@@ -11,10 +11,15 @@ export function optional(form: FormData, key: string, max = 4000): string | null
   return v === "" ? null : v;
 }
 
-/** Send the person back to a page with a plain-language message. */
-export function back(path: string, message: string, kind: "error" | "ok" = "error"): never {
-  const sep = path.includes("?") ? "&" : "?";
-  redirect(`${path}${sep}${kind}=${encodeURIComponent(message)}`);
+/**
+ * Send the person back to a page with a plain-language message. `place` names the panel the form was in,
+ * so the message shows next to it instead of at the top of a long page.
+ */
+export function back(path: string, message: string, kind: "error" | "ok" = "error", place?: string): never {
+  // The message goes before any #anchor, or the browser would read it as part of the anchor.
+  const [base, hash] = path.split("#");
+  const sep = base.includes("?") ? "&" : "?";
+  redirect(`${base}${sep}${kind}=${encodeURIComponent(message)}${place ? `&in=${place}` : ""}${hash ? "#" + hash : ""}`);
 }
 
 /** Turn a database error into words a team member understands. */

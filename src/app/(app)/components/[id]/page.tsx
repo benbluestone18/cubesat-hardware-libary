@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { canEdit, canManagePart, canManageTeam, getLibrary, getMemberships } from "@/lib/data";
+import { canEdit, canManagePart, canManageTeam, getLibrary, getMemberships, nameAliases } from "@/lib/data";
 import { createClient } from "@/lib/supabase/server";
 import { STATUS_LABEL, STATUS_ORDER } from "@/lib/status";
 import type { Comment, ComponentLink, FileRow, Update } from "@/lib/types";
@@ -11,7 +11,7 @@ import { addLink, removeLink, trashFile } from "@/app/actions/files";
 import { UpdateEntry } from "@/components/cards";
 import { CommentBody, Face, HealthState, Track, Empty } from "@/components/ui";
 import { Icon } from "@/components/icons";
-import { ConfirmButton } from "@/components/client";
+import { ConfirmButton, KeepDraft } from "@/components/client";
 import { FileUpload, MentionTextarea } from "@/components/forms";
 import { grams, watts } from "@/lib/budget";
 import { Flash, PageTitle, type SP } from "@/components/flash";
@@ -21,7 +21,7 @@ type Params = Promise<{ id: string }>;
 export async function generateMetadata({ params }: { params: Params }): Promise<Metadata> {
   const { id } = await params;
   const lib = await getLibrary();
-  return { title: lib.components.find((c) => c.id === id)?.name ?? "Component" };
+  return { title: lib.components.find((c) => c.id === id)?.name ?? "Part" };
 }
 
 function size(n: number) {
@@ -33,7 +33,7 @@ export default async function ComponentPage({ params, searchParams }: { params: 
   const sp = await searchParams;
   const supabase = await createClient();
   // The part's own rows load alongside the library, not after it.
-  const [lib, memberships, { data: ed }, { data: files }, { data: updates }, { data: comments }, { data: linkRows }] = await Promise.all([
+  const [lib, memberships, { data: ed }, { data: files }, { data: updates }, { data: comments }, { data: linkRows }, aliases] = await Promise.all([
     getLibrary(),
     getMemberships(),
     supabase.from("component_editors").select("person_id").eq("component_id", id),
@@ -41,6 +41,7 @@ export default async function ComponentPage({ params, searchParams }: { params: 
     supabase.from("updates").select("*").eq("component_id", id).order("week_start", { ascending: false }).limit(52),
     supabase.from("comments").select("*").eq("component_id", id).order("created_at"),
     supabase.from("component_links").select("*").eq("component_id", id).order("created_at"),
+    nameAliases(),
   ]);
   const c = lib.components.find((x) => x.id === id);
   if (!c) notFound();
@@ -136,11 +137,12 @@ export default async function ComponentPage({ params, searchParams }: { params: 
                         )}
                       </span>
                     </div>
-                    <p className="comment__body"><CommentBody body={m.body} people={names} /></p>
+                    <p className="comment__body"><CommentBody body={m.body} people={names} aliases={aliases} /></p>
                   </div>
                 </div>
               );
             })}
+            <Flash sp={sp} place="comments" />
             <form action={addComment} className="stack-sm">
               <input type="hidden" name="component_id" value={id} />
               <MentionTextarea people={names} name="body" required maxLength={4000} ariaLabel="Comment" placeholder="Ask a question or leave a note. Type @ to mention someone." />
@@ -186,10 +188,11 @@ export default async function ComponentPage({ params, searchParams }: { params: 
                 ))}
               </div>
             ))}
+            <Flash sp={sp} place="files" />
             {mayEdit && <FileUpload componentId={id} revision={c.revision} />}
           </section>
 
-          <section className="mc-panel mc-glass">
+          <section className="mc-panel mc-glass" id="links">
             <div className="mc-panel__head"><h2>Links</h2><span className="mc-label">{links.length}</span></div>
             {links.length === 0 && <p className="muted" style={{ fontSize: 13 }}>Google Drive files, folders, Docs and Sheets, or any other page about this part.</p>}
             {links.map((l) => (
@@ -203,8 +206,10 @@ export default async function ComponentPage({ params, searchParams }: { params: 
                 </span>
               </div>
             ))}
+            <Flash sp={sp} place="links" />
             {mayEdit && (
               <form action={addLink} className="stack-sm">
+                <KeepDraft id={`link-${id}`} />
                 <input type="hidden" name="component_id" value={id} />
                 <input className="input" name="url" type="url" required maxLength={2000} placeholder="https://drive.google.com/…" aria-label="Link" />
                 <div className="row">
@@ -239,7 +244,7 @@ export default async function ComponentPage({ params, searchParams }: { params: 
                   <button className="mc-btn mc-btn--secondary mc-btn--sm" type="submit">Add</button>
                 </form>
               )}
-              <hr className="sep" />
+              {lib.people.some((p) => p.id !== c.owner_id) && <><hr className="sep" />
               <form action={handOff} className="row">
                 <input type="hidden" name="component_id" value={id} />
                 <select className="select input--inline" name="person_id" required defaultValue="" aria-label="New owner">
@@ -247,7 +252,7 @@ export default async function ComponentPage({ params, searchParams }: { params: 
                   {lib.people.filter((p) => p.id !== c.owner_id).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
                 </select>
                 <ConfirmButton confirmLabel="Yes, hand it off">Hand off</ConfirmButton>
-              </form>
+              </form></>}
             </section>
           )}
         </div>

@@ -50,6 +50,11 @@ export function shortDate(iso: string | Date): string {
   return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: TEAM_TZ }).format(d);
 }
 
+/** "Nov 21, 3:05 PM", in the team's time zone. */
+export function dateTime(iso: string): string {
+  return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: TEAM_TZ }).format(new Date(iso));
+}
+
 /** Whole days between a timestamp and now. */
 export function daysSince(iso: string | null | undefined, now: Date = new Date()): number | null {
   if (!iso) return null;

@@ -2,8 +2,8 @@ import Link from "next/link";
 import { getMe, getProjects } from "@/lib/data";
 import { Face } from "@/components/ui";
 import { Icon } from "@/components/icons";
-import { Motion, ThemeToggle } from "@/components/client";
-import { ProjectPills, Rail } from "@/components/nav";
+import { Motion, NavScroll, Popovers, ThemeToggle } from "@/components/client";
+import { PostFab, ProjectPills, Rail } from "@/components/nav";
 import { signOut } from "@/app/actions/people";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
@@ -31,8 +31,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <main id="main" className="stack">{children}</main>
         </div>
       </div>
-      <Link className="mc-btn mc-btn--primary post-fab" href="/updates/new"><Icon name="plus" /> Post update</Link>
+      <PostFab />
       <Motion />
+      <Popovers />
+      <NavScroll />
     </div>
   );
 }

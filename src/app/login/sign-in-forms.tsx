@@ -93,9 +93,15 @@ export function EmailForm({ next, domain, primary }: { next: string; domain: str
       {state.status === "error" && <p className="notice notice--error" role="alert">{state.message}</p>}
       <label className="field">
         <span>School email</span>
-        <input className="input" type="email" name="email" required autoComplete="email" defaultValue={email} key={email} placeholder={`you@${domain}`} pattern={`.+@${domain.replace(/\./g, "\\.")}$`} title={`Use your @${domain} email`} />
+        <input className="input" type="email" name="email" required autoComplete="email" defaultValue={email} key={email} placeholder={`you@${domain}`} pattern={domainPattern(domain)} title={`Use your @${domain} email`} />
       </label>
       <SendButton wait={state.status === "error" ? wait : 0} label="Email me a link" primary={primary} />
     </form>
   );
+}
+
+/** "you@LGSstudent.org" is fine too: the server lowercases it. The pattern must stay valid in the browser's v-flag mode. */
+function domainPattern(domain: string): string {
+  const letters = [...domain].map((ch) => (/[a-z]/i.test(ch) ? `[${ch.toLowerCase()}${ch.toUpperCase()}]` : ch === "." ? "\\." : ch === "-" ? "\\-" : ch)).join("");
+  return `.+@${letters}`;
 }

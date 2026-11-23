@@ -286,3 +286,43 @@ details.inline { position: relative; }
 .mention-item { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border-radius: 12px; text-decoration: none; color: var(--ink); }
 .mention-item:hover { background: var(--surface-sunken); }
 .mention-item__body { font-size: 14px; line-height: 1.45; overflow-wrap: anywhere; }
+
+/* Final-check fixes, 23 Nov 2026 */
+/* Confirm buttons float under their trigger, so the row doesn't jump. */
+details.confirm { position: relative; }
+details.confirm[open] > summary { margin-bottom: 0; }
+.confirm__pop { position: absolute; right: 0; top: calc(100% + 4px); z-index: 31; display: flex; padding: 6px; border-radius: 14px; background: var(--glass-strong); box-shadow: 0 0 0 1px var(--border), 0 12px 28px -12px rgba(0,0,0,.35); white-space: nowrap; }
+:root:not([data-theme="dark"]) .confirm__pop { background: rgba(255,255,255,.98); }
+.popover .confirm__pop { position: static; padding: 0; margin-top: 6px; background: none; box-shadow: none; }
+
+/* The folder menu stacks its forms and stays inside the Library panel. */
+.tree .popover { width: min(340px, calc(100vw - 48px)); display: flex; flex-direction: column; align-items: stretch; }
+.tree .popover .row { flex-wrap: wrap; }
+.tree .popover .input--inline, .tree .popover .select { flex: 1 1 100%; min-width: 0; width: 100%; }
+
+/* Long part names wrap in the Library instead of cutting off. */
+.tree__comp { flex-wrap: wrap; row-gap: 2px; }
+.tree__comp b { white-space: normal; overflow-wrap: anywhere; }
+
+/* The board wraps its columns instead of hiding Released and On hold off to the side. */
+.mc-board--wrap { grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); overflow: visible; }
+.mc-board--wrap .mc-col--empty .mc-col__panel { min-height: 0; }
+@media (max-width: 720px) {
+  .mc-board--wrap { grid-template-columns: 1fr; }
+  .mc-board--wrap .mc-col--empty .mc-col__panel { display: none; }
+  .mc-board--wrap .mc-col--empty .mc-col__title { opacity: .6; }
+}
+
+/* The project tabs fade at an edge when more are hidden there. */
+.mc-top .mc-nav.is-more-right { -webkit-mask-image: linear-gradient(90deg, #000 85%, transparent); mask-image: linear-gradient(90deg, #000 85%, transparent); }
+.mc-top .mc-nav.is-more-left { -webkit-mask-image: linear-gradient(90deg, transparent, #000 15%); mask-image: linear-gradient(90deg, transparent, #000 15%); }
+.mc-top .mc-nav.is-more-left.is-more-right { -webkit-mask-image: linear-gradient(90deg, transparent, #000 15%, #000 85%, transparent); mask-image: linear-gradient(90deg, transparent, #000 15%, #000 85%, transparent); }
+
+/* How far over budget, under the bar. */
+.budget-grid small.over { display: block; margin-top: 4px; font-size: 12px; }
+
+@media (max-width: 720px) {
+  .hide-sm { display: none; }
+  /* Room above the pinned rail and Post update button, so they never cover the last line. */
+  .app .mc-screen { padding-bottom: 150px; }
+}

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { getLibrary, getMemberships, peopleHealth } from "@/lib/data";
-import { HEALTH_LABEL } from "@/lib/status";
+import { personStateLabel } from "@/lib/status";
 import { ago } from "@/lib/week";
 import { Portrait } from "@/components/cards";
 import { Deck } from "@/components/client";
@@ -21,7 +21,7 @@ export default async function People() {
     rows: memberships.filter((m) => m.project_id === proj.id)
       .map((m) => ({ p: people.find((x) => x.person.id === m.person_id)!, lead: m.lead }))
       .filter((r) => r.p)
-      .sort((a, b) => Number(b.lead) - Number(a.lead) || byName(a, b)),
+      .sort((a, b) => Number(b.p.person.id === proj.owner_id) - Number(a.p.person.id === proj.owner_id) || Number(b.lead) - Number(a.lead) || byName(a, b)),
   }));
   const loose = people.filter((p) => !memberships.some((m) => m.person_id === p.person.id && lib.project.has(m.project_id)));
   if (loose.length) groups.push({ key: "none", title: "Not on a team yet", rows: loose.map((p) => ({ p, lead: false })).sort(byName) });
@@ -44,15 +44,15 @@ export default async function People() {
           {g.rows.length === 0 ? <p className="muted" style={{ fontSize: 13 }}>No one on this team yet. Open the project to add people.</p> : (
             <div className="table-wrap">
               <table className="table">
-                <thead><tr><th>Name</th><th>Also on</th><th>Open parts</th><th>Last update</th><th>State</th></tr></thead>
+                <thead><tr><th>Name</th><th className="hide-sm">Also on</th><th className="hide-sm">Open parts</th><th>Last update</th><th>State</th></tr></thead>
                 <tbody>
                   {g.rows.map(({ p, lead }) => (
                     <tr key={p.person.id}>
-                      <td><span className="row"><Face person={p.person} size={28} /><Link className="link" href={`/people/${p.person.id}`}>{p.person.name}</Link>{lead && <span className="mc-chip">Lead</span>}{p.person.role === "admin" && <span className="mc-chip">Admin</span>}</span></td>
-                      <td className="muted">{teams(p.person.id).filter((t) => t !== g.title).join(", ") || "None"}</td>
-                      <td className="mc-data">{(g.projectId ? p.active.filter((c) => c.project_id === g.projectId) : p.active).length}</td>
+                      <td><span className="row"><Face person={p.person} size={28} /><Link className="link" href={`/people/${p.person.id}`}>{p.person.name}</Link>{g.projectId && lib.project.get(g.projectId)?.owner_id === p.person.id ? <span className="mc-chip">Owner</span> : lead && <span className="mc-chip">Lead</span>}{p.person.role === "admin" && <span className="mc-chip">Admin</span>}</span></td>
+                      <td className="muted hide-sm">{teams(p.person.id).filter((t) => t !== g.title).join(", ") || "None"}</td>
+                      <td className="mc-data hide-sm">{(g.projectId ? p.active.filter((c) => c.project_id === g.projectId) : p.active).length}</td>
                       <td className="muted">{ago(p.latest)}</td>
-                      <td>{p.health ? <State health={p.health.health} label={p.health.health === "done" ? "On track" : `${HEALTH_LABEL[p.health.health]} ${p.health.days}d`} /> : <span className="faint">Nothing active</span>}</td>
+                      <td>{p.health ? <State health={p.health.health} label={personStateLabel(p.health)} /> : <span className="faint">Nothing active</span>}</td>
                     </tr>
                   ))}
                 </tbody>
