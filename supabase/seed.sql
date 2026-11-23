@@ -59,29 +59,6 @@ insert into public.component_editors (component_id, person_id, granted_by) value
   ('44444444-0000-0000-0000-000000000001', '11111111-0000-0000-0000-000000000003', '11111111-0000-0000-0000-000000000001'),
   ('44444444-0000-0000-0000-000000000008', '11111111-0000-0000-0000-000000000006', '11111111-0000-0000-0000-000000000004');
 
--- Updates at different ages, so the feed shows every state: fresh, quiet (7d+), stalled (14d+) and blocked.
-insert into public.updates (component_id, author_id, week_start, done, next, blocked, created_at)
-select c::uuid, a::uuid, date_trunc('week', now() - (d || ' days')::interval)::date, done, nxt, blk, now() - (d || ' days')::interval
-from (values
-  ('44444444-0000-0000-0000-000000000001', '11111111-0000-0000-0000-000000000001', 1, 'Wound the rev B coil and measured 41 Ω.', 'Bench test the field strength with the magnetometer.', ''),
-  ('44444444-0000-0000-0000-000000000001', '11111111-0000-0000-0000-000000000001', 8, 'Picked 32 AWG after the heat test.', 'Wind rev B.', ''),
-  ('44444444-0000-0000-0000-000000000002', '11111111-0000-0000-0000-000000000001', 2, 'Schematic done in KiCad.', 'Layout.', 'Need the final board outline from Structures before layout.'),
-  ('44444444-0000-0000-0000-000000000003', '11111111-0000-0000-0000-000000000003', 9, 'Picked the photodiodes.', 'Draw the face boards.', ''),
-  ('44444444-0000-0000-0000-000000000004', '11111111-0000-0000-0000-000000000003', 20, 'Rev C boards came back and work.', '', ''),
-  ('44444444-0000-0000-0000-000000000005', '11111111-0000-0000-0000-000000000002', 3, 'Window seal design v2.', 'Print a test chamber.', ''),
-  ('44444444-0000-0000-0000-000000000006', '11111111-0000-0000-0000-000000000005', 16, 'LED layout started.', 'Pick the driver chip.', ''),
-  ('44444444-0000-0000-0000-000000000008', '11111111-0000-0000-0000-000000000004', 4, 'Review comments fixed.', 'Order boards.', ''),
-  ('44444444-0000-0000-0000-000000000008', '11111111-0000-0000-0000-000000000006', 11, 'Checked the load switch footprints.', '', ''),
-  ('44444444-0000-0000-0000-00000000000a', '11111111-0000-0000-0000-000000000003', 6, 'Frame assembled and fit-checked.', '', '')
-) as t(c, a, d, done, nxt, blk);
-
-update public.components c set last_update_at = u.latest
-from (select component_id, max(created_at) latest from public.updates group by component_id) u
-where u.component_id = c.id;
-
 insert into public.comments (component_id, author_id, body, created_at) values
   ('44444444-0000-0000-0000-000000000002', '11111111-0000-0000-0000-000000000003', 'Board outline is 90 × 90 mm with 3.2 mm corner holes. I''ll upload the DXF this week.', now() - interval '1 day'),
   ('44444444-0000-0000-0000-000000000001', '11111111-0000-0000-0000-000000000004', 'What current does it pull at full duty? I need it for the power budget.', now() - interval '2 days');
-
-insert into public.weeks (week_start, slides_url, notes) values
-  (date_trunc('week', now())::date, 'https://docs.google.com/presentation/d/example/edit', 'Design review for the power board.');
