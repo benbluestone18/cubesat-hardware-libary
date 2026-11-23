@@ -20,7 +20,9 @@ export default async function Weeks() {
   ]);
   const W = new Map(((weeks ?? []) as Week[]).map((w) => [w.week_start, w]));
   const live = new Set(lib.components.map((c) => c.id));
-  const list = Array.from({ length: 16 }, (_, i) => addWeeks(now, -i));
+  // Only weeks with something in them, plus this week, so there are no empty rows before anyone posted.
+  const used = new Set([...W.keys(), ...(ups ?? []).filter((u) => live.has(u.component_id)).map((u) => u.week_start as string)]);
+  const list = Array.from({ length: 16 }, (_, i) => addWeeks(now, -i)).filter((w) => w === now || used.has(w));
   return (
     <>
       <PageTitle title="Weekly meetings" sub="One page per week: the slides link and every update posted that week, grouped by project." />
