@@ -31,18 +31,18 @@ function size(n: number) {
 export default async function ComponentPage({ params, searchParams }: { params: Params; searchParams: SP }) {
   const { id } = await params;
   const sp = await searchParams;
-  const lib = await getLibrary();
-  const c = lib.components.find((x) => x.id === id);
-  if (!c) notFound();
-
   const supabase = await createClient();
-  const [{ data: ed }, { data: files }, { data: updates }, { data: comments }, { data: linkRows }] = await Promise.all([
+  // The part's own rows load alongside the library, not after it.
+  const [lib, { data: ed }, { data: files }, { data: updates }, { data: comments }, { data: linkRows }] = await Promise.all([
+    getLibrary(),
     supabase.from("component_editors").select("person_id").eq("component_id", id),
     supabase.from("files").select("*").eq("component_id", id).is("deleted_at", null).order("created_at", { ascending: false }),
     supabase.from("updates").select("*").eq("component_id", id).order("week_start", { ascending: false }).limit(52),
     supabase.from("comments").select("*").eq("component_id", id).order("created_at"),
     supabase.from("component_links").select("*").eq("component_id", id).order("created_at"),
   ]);
+  const c = lib.components.find((x) => x.id === id);
+  if (!c) notFound();
   const editorIds = (ed ?? []).map((e) => e.person_id as string);
   const editors = editorIds.map((e) => lib.person.get(e)).filter(Boolean);
   const owner = lib.person.get(c.owner_id);

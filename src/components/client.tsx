@@ -1,5 +1,6 @@
 "use client";
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, useTransition } from "react";
+import { usePathname } from "next/navigation";
 import { saveTheme } from "@/app/actions/people";
 
 /** Sun/moon switch. Saves to a cookie (instant, no flash) and to the profile (follows you across devices). */
@@ -22,6 +23,11 @@ export function ThemeToggle() {
 
 /** Motion from the design system: scroll reveals, count-ups and the glass spotlight. All off with reduced motion. */
 export function Motion() {
+  const path = usePathname();
+  const firstPath = useRef(path);
+  const navigated = useRef(false);
+  // A layout effect runs in the same commit as the new page, before the MutationObserver below sees it.
+  useLayoutEffect(() => { if (path !== firstPath.current) navigated.current = true; }, [path]);
   useEffect(() => {
     const root = document.documentElement;
     const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -34,8 +40,15 @@ export function Motion() {
       requestAnimationFrame(f);
     };
     const show = (el: Element) => { el.classList.add("is-in"); el.querySelectorAll<HTMLElement>("[data-count]").forEach(count); };
+    // Reveals play once, on the first page load. After a click to another page, content shows at once:
+    // fading every panel in again made each tab switch feel most of a second slower than it was.
+    const instant = (el: Element) => {
+      el.classList.add("is-in", "mc-instant");
+      el.querySelectorAll<HTMLElement>("[data-count]").forEach((c) => { c.textContent = c.dataset.count ?? c.textContent; });
+    };
     const observe = () => {
       const items = document.querySelectorAll("[data-reveal]:not(.is-in)");
+      if (navigated.current) { items.forEach(instant); return () => {}; }
       if (still || !("IntersectionObserver" in window)) { items.forEach(show); return () => {}; }
       const io = new IntersectionObserver((es) => es.forEach((e) => { if (e.isIntersecting) { show(e.target); io.unobserve(e.target); } }), { threshold: 0.12, rootMargin: "0px 0px -6% 0px" });
       items.forEach((el) => io.observe(el));
