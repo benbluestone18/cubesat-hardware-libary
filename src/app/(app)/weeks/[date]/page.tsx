@@ -22,11 +22,12 @@ export default async function WeekPage({ params, searchParams }: { params: Param
   const { date } = await params;
   const sp = await searchParams;
   if (!/^\d{4}-\d\d-\d\d$/.test(date) || Number.isNaN(Date.parse(date)) || weekStart(date) !== date) notFound();
-  const lib = await getLibrary();
   const supabase = await createClient();
-  const [{ data: week }, updates] = await Promise.all([
+  const libP = getLibrary();
+  const [lib, { data: week }, updates] = await Promise.all([
+    libP,
     supabase.from("weeks").select("*").eq("week_start", date).maybeSingle(),
-    recentUpdates(lib, { week: date, limit: 500 }),
+    recentUpdates(libP, { week: date, limit: 500 }),
   ]);
   const w = week as Week | null;
   const now = weekStart();

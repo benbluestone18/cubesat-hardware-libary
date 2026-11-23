@@ -10,15 +10,17 @@ import { Flash, PageTitle, type SP } from "@/components/flash";
 
 export default async function Feed({ searchParams }: { searchParams: SP }) {
   const sp = await searchParams;
-  const lib = await getLibrary();
   const thisWeek = weekStart();
   const supabase = await createClient();
-  const [updates, people, { data: week }, mentions, issues] = await Promise.all([
-    recentUpdates(lib, { limit: 25 }),
-    peopleHealth(lib),
+  // One round trip: every query starts now, instead of waiting for the library first.
+  const libP = getLibrary();
+  const [lib, updates, people, { data: week }, mentions, issues] = await Promise.all([
+    libP,
+    recentUpdates(libP, { limit: 25 }),
+    peopleHealth(libP),
     supabase.from("weeks").select("*").eq("week_start", thisWeek).maybeSingle(),
-    myMentions(lib, 6),
-    openIssues(lib),
+    myMentions(libP, 6),
+    openIssues(libP),
   ]);
   const names = lib.people.map((p) => ({ id: p.id, name: p.name }));
   const partOf = (cid: string) => lib.components.find((c) => c.id === cid);

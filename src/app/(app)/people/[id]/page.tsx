@@ -19,14 +19,14 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
 export default async function Profile({ params, searchParams }: { params: Params; searchParams: SP }) {
   const { id } = await params;
   const sp = await searchParams;
-  const lib = await getLibrary();
-  const person = lib.person.get(id);
-  if (!person) notFound();
   const supabase = await createClient();
-  const [all, memberships, updates, { data: ed }] = await Promise.all([
-    peopleHealth(lib), getMemberships(), recentUpdates(lib, { authorId: id, limit: 15 }),
+  const libP = getLibrary();
+  const [lib, all, memberships, updates, { data: ed }] = await Promise.all([
+    libP, peopleHealth(libP), getMemberships(), recentUpdates(libP, { authorId: id, limit: 15 }),
     supabase.from("component_editors").select("component_id").eq("person_id", id),
   ]);
+  const person = lib.person.get(id);
+  if (!person) notFound();
   const me = all.find((p) => p.person.id === id)!;
   const teams = memberships.filter((m) => m.person_id === id).map((m) => lib.project.get(m.project_id)?.name).filter(Boolean) as string[];
   const helping = lib.components.filter((c) => (ed ?? []).some((e) => e.component_id === c.id));

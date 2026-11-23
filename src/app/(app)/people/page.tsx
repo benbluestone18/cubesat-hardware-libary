@@ -11,8 +11,8 @@ import { PageTitle } from "@/components/flash";
 export const metadata: Metadata = { title: "People" };
 
 export default async function People() {
-  const lib = await getLibrary();
-  const [people, memberships] = await Promise.all([peopleHealth(lib), getMemberships()]);
+  const libP = getLibrary();
+  const [lib, people, memberships] = await Promise.all([libP, peopleHealth(libP), getMemberships()]);
   const teams = (id: string) => memberships.filter((m) => m.person_id === id).map((m) => lib.project.get(m.project_id)?.name).filter(Boolean) as string[];
   // One section per team, leads first; then everyone who hasn't joined a team.
   const byName = (a: { p: (typeof people)[number] }, b: { p: (typeof people)[number] }) => a.p.person.name.localeCompare(b.p.person.name);

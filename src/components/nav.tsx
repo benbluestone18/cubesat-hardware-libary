@@ -7,6 +7,8 @@ function active(path: string, href: string) {
   return href === "/" ? path === "/" : path === href || path.startsWith(href + "/");
 }
 
+// The top-bar and side-rail links prefetch the whole page, not just the loading shell, so a tab opens
+// from data already in the browser (kept for staleTimes in next.config.ts) with no wait on the server.
 const RAIL = [
   { href: "/", icon: "home", label: "Feed" },
   { href: "/projects", icon: "folder", label: "Projects" },
@@ -23,7 +25,7 @@ export function Rail({ admin }: { admin: boolean }) {
       {items.map((i, n) => (
         <span key={i.href} style={{ display: "contents" }}>
           {n === 5 && <span className="mc-rail__sep" />}
-          <Link className="mc-icon-btn" href={i.href} aria-label={i.label} title={i.label} aria-current={active(path, i.href) ? "page" : undefined}>
+          <Link className="mc-icon-btn" href={i.href} prefetch aria-label={i.label} title={i.label} aria-current={active(path, i.href) ? "page" : undefined}>
             <Icon name={i.icon} />
           </Link>
         </span>
@@ -36,9 +38,9 @@ export function ProjectPills({ projects }: { projects: { id: string; name: strin
   const path = usePathname();
   return (
     <nav className="mc-nav" aria-label="Projects">
-      <Link href="/" aria-current={path === "/" ? "page" : undefined}>Feed</Link>
+      <Link href="/" prefetch aria-current={path === "/" ? "page" : undefined}>Feed</Link>
       {projects.map((p) => (
-        <Link key={p.id} href={`/projects/${p.id}`} aria-current={active(path, `/projects/${p.id}`) ? "page" : undefined}>{p.name}</Link>
+        <Link key={p.id} href={`/projects/${p.id}`} prefetch aria-current={active(path, `/projects/${p.id}`) ? "page" : undefined}>{p.name}</Link>
       ))}
     </nav>
   );
