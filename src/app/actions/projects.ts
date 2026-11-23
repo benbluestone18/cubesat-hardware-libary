@@ -2,7 +2,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { back, explain, optional, str } from "./util";
+import { back, explain, optional, safePath, str } from "./util";
 
 async function uid() {
   const supabase = await createClient();
@@ -16,7 +16,7 @@ export async function createProject(form: FormData) {
   if (!name) back("/projects", "Give the project a name");
   const { data, error } = await supabase.from("projects").insert({ name, description: str(form, "description", 2000), created_by: me }).select("id").single();
   if (error || !data) back("/projects", explain(error));
-  await supabase.from("memberships").insert({ person_id: me, project_id: data.id, lead: true });
+  // The database adds the creator to the team as its lead and owner.
   revalidatePath("/", "layout");
   redirect(`/projects/${data.id}`);
 }
@@ -29,13 +29,13 @@ export async function updateProject(form: FormData) {
   const mass_budget_g = mass ? Number(mass) : null, power_budget_w = power ? Number(power) : null;
   if (mass_budget_g !== null && !(mass_budget_g > 0 && mass_budget_g <= 100000)) back(`/projects/${id}`, "The mass budget must be grams, above 0");
   if (power_budget_w !== null && !(power_budget_w > 0 && power_budget_w <= 1000)) back(`/projects/${id}`, "The power budget must be watts, above 0");
-  const { error } = await supabase.from("projects").update({
+  const { data: saved, error } = await supabase.from("projects").update({
     mass_budget_g, power_budget_w,
     name: str(form, "name", 80),
     description: str(form, "description", 2000),
     status: ["active", "paused", "done"].includes(status) ? status : "active",
-  }).eq("id", id);
-  if (error) back(`/projects/${id}`, explain(error));
+  }).eq("id", id).select("id");
+  if (error || !saved?.length) back(`/projects/${id}`, error ? explain(error) : "Only this team's leads and admins can change its settings");
   revalidatePath("/", "layout");
   back(`/projects/${id}`, "Project saved", "ok");
 }
@@ -43,10 +43,10 @@ export async function updateProject(form: FormData) {
 export async function trashProject(form: FormData) {
   const { supabase } = await uid();
   const id = str(form, "id");
-  const { error } = await supabase.from("projects").update({ deleted_at: new Date().toISOString() }).eq("id", id);
-  if (error) back(`/projects/${id}`, explain(error));
+  const { data, error } = await supabase.from("projects").update({ deleted_at: new Date().toISOString() }).eq("id", id).select("id");
+  if (error || !data?.length) back(`/projects/${id}`, error ? explain(error) : "Only this team's leads and admins can trash it");
   revalidatePath("/", "layout");
-  back("/projects", "Moved the project to trash. The admin can restore it.", "ok");
+  back("/projects", "Moved the project to trash. An admin can restore it.", "ok");
 }
 
 export async function joinProject(form: FormData) {
@@ -61,9 +61,21 @@ export async function joinProject(form: FormData) {
 export async function leaveProject(form: FormData) {
   const { supabase, uid: me } = await uid();
   const id = str(form, "project_id");
-  await supabase.from("memberships").delete().eq("person_id", me).eq("project_id", id);
-  revalidatePath(`/projects/${id}`);
-  revalidatePath(`/people/${me}`);
+  // The database refuses if you own the team and others are still on it.
+  const { error } = await supabase.from("memberships").delete().eq("person_id", me).eq("project_id", id);
+  if (error) back(`/projects/${id}`, explain(error));
+  revalidatePath("/", "layout");
+  back(`/projects/${id}`, "You left the team", "ok");
+}
+
+/** The owner, or an admin, hands the team to someone already on it. */
+export async function transferTeam(form: FormData) {
+  const { supabase } = await uid();
+  const project_id = str(form, "project_id");
+  const { error } = await supabase.rpc("transfer_team", { pid: project_id, new_owner: str(form, "person_id") });
+  if (error) back(`/projects/${project_id}`, explain(error));
+  revalidatePath("/", "layout");
+  back(`/projects/${project_id}`, "Ownership handed over", "ok");
 }
 
 /** Admins and team leads add someone to a team. The database checks who may. */
@@ -132,10 +144,11 @@ export async function restoreItem(form: FormData) {
   const { supabase } = await uid();
   const table = str(form, "table");
   if (!["projects", "folders", "components", "files"].includes(table)) back("/admin", "Unknown item");
-  const { error } = await supabase.from(table).update({ deleted_at: null }).eq("id", str(form, "id"));
-  if (error) back("/admin", explain(error));
+  const to = safePath(str(form, "back"), "/admin");
+  const { data, error } = await supabase.from(table).update({ deleted_at: null }).eq("id", str(form, "id")).select("id");
+  if (error || !data?.length) back(to, error ? explain(error) : "You don't have permission to do that");
   revalidatePath("/", "layout");
-  back("/admin", "Restored", "ok");
+  back(to, "Restored", "ok");
 }
 
 /** Admins set the whole satellite's mass and power limits. */

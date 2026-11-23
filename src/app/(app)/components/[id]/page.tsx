@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { canEdit, getLibrary } from "@/lib/data";
+import { canEdit, canManagePart, canManageTeam, getLibrary, getMemberships } from "@/lib/data";
 import { createClient } from "@/lib/supabase/server";
 import { STATUS_LABEL, STATUS_ORDER } from "@/lib/status";
 import type { Comment, ComponentLink, FileRow, Update } from "@/lib/types";
@@ -33,8 +33,9 @@ export default async function ComponentPage({ params, searchParams }: { params: 
   const sp = await searchParams;
   const supabase = await createClient();
   // The part's own rows load alongside the library, not after it.
-  const [lib, { data: ed }, { data: files }, { data: updates }, { data: comments }, { data: linkRows }] = await Promise.all([
+  const [lib, memberships, { data: ed }, { data: files }, { data: updates }, { data: comments }, { data: linkRows }] = await Promise.all([
     getLibrary(),
+    getMemberships(),
     supabase.from("component_editors").select("person_id").eq("component_id", id),
     supabase.from("files").select("*").eq("component_id", id).is("deleted_at", null).order("created_at", { ascending: false }),
     supabase.from("updates").select("*").eq("component_id", id).order("week_start", { ascending: false }).limit(52),
@@ -46,9 +47,10 @@ export default async function ComponentPage({ params, searchParams }: { params: 
   const editorIds = (ed ?? []).map((e) => e.person_id as string);
   const editors = editorIds.map((e) => lib.person.get(e)).filter(Boolean);
   const owner = lib.person.get(c.owner_id);
-  const mayEdit = canEdit(lib.me, c, editorIds);
+  const mayEdit = canEdit(lib.me, c, editorIds, memberships);
   const links = (linkRows ?? []) as ComponentLink[];
-  const isOwner = lib.me.role === "admin" || c.owner_id === lib.me.id;
+  const isOwner = canManagePart(lib.me, c, memberships);
+  const moderates = canManageTeam(lib.me, c.project_id, memberships);
   const ups = (updates ?? []) as Update[];
   const thisWeek = weekStart();
   const postedThisWeek = ups.some((u) => u.week_start === thisWeek);
@@ -126,7 +128,7 @@ export default async function ComponentPage({ params, searchParams }: { params: 
                             <button className="mc-btn mc-btn--secondary mc-btn--sm" type="submit">{open ? "Resolve" : "Reopen"}</button>
                           </form>
                         )}
-                        {(m.author_id === lib.me.id || lib.me.role === "admin") && (
+                        {(m.author_id === lib.me.id || moderates) && (
                           <form action={deleteComment}>
                             <input type="hidden" name="id" value={m.id} /><input type="hidden" name="component_id" value={id} />
                             <ConfirmButton className="mc-btn mc-btn--ghost mc-btn--sm" confirmLabel="Delete">Delete</ConfirmButton>
@@ -217,7 +219,7 @@ export default async function ComponentPage({ params, searchParams }: { params: 
           {isOwner && (
             <section className="mc-panel mc-glass">
               <div className="mc-panel__head"><h2>Who can edit</h2></div>
-              <p className="muted" style={{ fontSize: 13 }}>Editors can change details, post updates and upload files. Only the owner and the admin can add editors or hand the part off.</p>
+              <p className="muted" style={{ fontSize: 13 }}>Editors can change details, post updates and upload files. Only the owner, the team&apos;s leads and admins can add editors or hand the part off.</p>
               <div className="people-picker">
                 {editors.map((e) => (
                   <form key={e!.id} action={removeEditor} className="chip-person">

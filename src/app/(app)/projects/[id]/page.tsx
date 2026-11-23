@@ -5,7 +5,9 @@ import { canManageTeam, getLibrary, getMemberships, openIssues, type ComponentWi
 import { grams, sumBudget, watts } from "@/lib/budget";
 import { STATUS_LABEL, STATUS_ORDER, byUrgency, type ComponentStatus, type Health } from "@/lib/status";
 import type { Folder } from "@/lib/types";
-import { addMember, createFolder, joinProject, leaveProject, removeMember, setLead, renameFolder, trashFolder, trashProject, updateProject } from "@/app/actions/projects";
+import { addMember, createFolder, joinProject, leaveProject, removeMember, restoreItem, setLead, renameFolder, transferTeam, trashFolder, trashProject, updateProject } from "@/app/actions/projects";
+import { createClient } from "@/lib/supabase/server";
+import { shortDate } from "@/lib/week";
 import { BudgetBar, Face, Empty } from "@/components/ui";
 import { Icon, StatusIcon } from "@/components/icons";
 import { ConfirmButton } from "@/components/client";
@@ -108,6 +110,26 @@ function Tree({ parent, folders, comps, lib, projectId, all }: { parent: string 
   );
 }
 
+type TrashRow = { table: string; id: string; name: string; kind: string; deleted_at: string };
+
+/** Folders, parts and files trashed in this project, for its leads to restore. */
+async function projectTrash(projectId: string, liveIds: string[]): Promise<TrashRow[]> {
+  const supabase = await createClient();
+  const [fo, co] = await Promise.all([
+    supabase.from("folders").select("id, name, deleted_at").eq("project_id", projectId).not("deleted_at", "is", null),
+    supabase.from("components").select("id, name, deleted_at").eq("project_id", projectId).not("deleted_at", "is", null),
+  ]);
+  const partIds = [...liveIds, ...(co.data ?? []).map((c) => c.id as string)];
+  const fi = partIds.length
+    ? await supabase.from("files").select("id, filename, deleted_at").in("component_id", partIds).not("deleted_at", "is", null)
+    : { data: [] };
+  return [
+    ...(fo.data ?? []).map((r) => ({ table: "folders", id: r.id, name: r.name, kind: "Folder", deleted_at: r.deleted_at })),
+    ...(co.data ?? []).map((r) => ({ table: "components", id: r.id, name: r.name, kind: "Part", deleted_at: r.deleted_at })),
+    ...(fi.data ?? []).map((r) => ({ table: "files", id: r.id, name: r.filename, kind: "File", deleted_at: r.deleted_at })),
+  ].sort((a, b) => b.deleted_at.localeCompare(a.deleted_at));
+}
+
 export default async function ProjectPage({ params, searchParams }: { params: Params; searchParams: SP }) {
   const { id } = await params;
   const sp = await searchParams;
@@ -124,10 +146,16 @@ export default async function ProjectPage({ params, searchParams }: { params: Pa
   const folders = lib.folders.filter((f) => f.project_id === id);
   const rows = memberships.filter((m) => m.project_id === id);
   const leads = new Set(rows.filter((m) => m.lead).map((m) => m.person_id));
+  const ownerId = project.owner_id;
+  const rank = (pid: string) => (pid === ownerId ? 2 : leads.has(pid) ? 1 : 0);
   const members = rows.map((m) => lib.person.get(m.person_id)!).filter(Boolean)
-    .sort((a, b) => Number(leads.has(b.id)) - Number(leads.has(a.id)) || a.name.localeCompare(b.name));
+    .sort((a, b) => rank(b.id) - rank(a.id) || a.name.localeCompare(b.name));
   const isMember = members.some((m) => m.id === lib.me.id);
   const manage = canManageTeam(lib.me, id, memberships);
+  // Same rule as transfer_team in the database: the owner, an admin, or any lead when no one owns it.
+  const canTransfer = lib.me.role === "admin" || ownerId === lib.me.id || (!ownerId && leads.has(lib.me.id));
+  const ownerStuck = ownerId === lib.me.id && members.length > 1;
+  const trash = manage ? await projectTrash(id, all.map((c) => c.id)) : [];
   const others = lib.people.filter((p) => !members.some((m) => m.id === p.id));
   const owners = [...new Set(all.map((c) => c.owner_id))].map((o) => lib.person.get(o)).filter(Boolean);
   const budget = sumBudget(all);
@@ -138,7 +166,9 @@ export default async function ProjectPage({ params, searchParams }: { params: Pa
       <PageTitle eyebrow={<><Link href="/projects">Projects</Link><span>/</span></>} title={project.name} sub={project.description || undefined}>
         <form action={isMember ? leaveProject : joinProject}>
           <input type="hidden" name="project_id" value={id} />
-          <button className="mc-btn mc-btn--secondary" type="submit">{isMember ? "Leave project" : "Join project"}</button>
+          {isMember
+            ? <ConfirmButton className="mc-btn mc-btn--secondary" confirmLabel={ownerStuck ? "Hand the team over first (Team panel)" : "Yes, leave"}>Leave team</ConfirmButton>
+            : <button className="mc-btn mc-btn--secondary" type="submit">Join team</button>}
         </form>
         <Link className="mc-btn mc-btn--primary" href={`/components/new?project=${id}`}><Icon name="plus" /> New component</Link>
       </PageTitle>
@@ -207,23 +237,35 @@ export default async function ProjectPage({ params, searchParams }: { params: Pa
                     <Link className="person-row" href={`/people/${m.id}`} style={{ gridTemplateColumns: "auto 1fr" }}>
                       <Face person={m} size={32} link={false} />
                       <div>
-                        <div className="person-row__name">{m.name}{leads.has(m.id) && <span className="mc-chip" style={{ marginLeft: 8 }}>Lead</span>}</div>
+                        <div className="person-row__name">{m.name}{m.id === ownerId ? <span className="mc-chip" style={{ marginLeft: 8 }}>Owner</span> : leads.has(m.id) && <span className="mc-chip" style={{ marginLeft: 8 }}>Lead</span>}</div>
                         <div className="person-row__meta">{((n) => `${n} ${n === 1 ? "part" : "parts"} here`)(all.filter((c) => c.owner_id === m.id).length)}</div>
                       </div>
                     </Link>
-                    {manage && (
+                    {(manage || m.id === lib.me.id) && (
                       <details className="inline member-row__menu">
-                        <summary className="mc-icon-btn mc-icon-btn--sm" aria-label={`Change ${m.name}'s place on the team`}><Icon name="chevron" /></summary>
+                        <summary className="mc-icon-btn mc-icon-btn--sm" aria-label={m.id === lib.me.id ? "Your place on the team" : `Change ${m.name}'s place on the team`}><Icon name="chevron" /></summary>
                         <div className="mc-panel mc-glass popover stack-sm">
-                          <form action={setLead}>
-                            <input type="hidden" name="project_id" value={id} /><input type="hidden" name="person_id" value={m.id} />
-                            <input type="hidden" name="lead" value={leads.has(m.id) ? "false" : "true"} />
-                            <button className="mc-btn mc-btn--secondary mc-btn--sm" type="submit">{leads.has(m.id) ? "Remove as lead" : "Make team lead"}</button>
-                          </form>
-                          <form action={removeMember}>
-                            <input type="hidden" name="project_id" value={id} /><input type="hidden" name="person_id" value={m.id} />
-                            <ConfirmButton className="mc-btn mc-btn--ghost mc-btn--sm" confirmLabel={`Yes, remove ${m.name.split(" ")[0]}`}>Remove from team</ConfirmButton>
-                          </form>
+                          {canTransfer && m.id !== ownerId && (
+                            <form action={transferTeam}>
+                              <input type="hidden" name="project_id" value={id} /><input type="hidden" name="person_id" value={m.id} />
+                              <ConfirmButton confirmLabel={m.id === lib.me.id ? "Yes, take ownership" : `Yes, hand ${project.name} to ${m.name.split(" ")[0]}`}>{m.id === lib.me.id ? "Take ownership" : "Make owner"}</ConfirmButton>
+                            </form>
+                          )}
+                          {manage && m.id !== ownerId && (
+                            <form action={setLead}>
+                              <input type="hidden" name="project_id" value={id} /><input type="hidden" name="person_id" value={m.id} />
+                              <input type="hidden" name="lead" value={leads.has(m.id) ? "false" : "true"} />
+                              <button className="mc-btn mc-btn--secondary mc-btn--sm" type="submit">{leads.has(m.id) ? (m.id === lib.me.id ? "Step down as lead" : "Remove as lead") : "Make team lead"}</button>
+                            </form>
+                          )}
+                          {m.id === ownerId && members.length > 1 ? (
+                            <p className="faint" style={{ fontSize: 12, maxWidth: 220 }}>{m.id === lib.me.id ? "You own this team. To leave or step down, make someone else the owner first." : "The owner stays a lead and can't be removed until they hand the team over."}</p>
+                          ) : (
+                            <form action={m.id === lib.me.id ? leaveProject : removeMember}>
+                              <input type="hidden" name="project_id" value={id} /><input type="hidden" name="person_id" value={m.id} />
+                              <ConfirmButton className="mc-btn mc-btn--ghost mc-btn--sm" confirmLabel={m.id === lib.me.id ? "Yes, leave" : `Yes, remove ${m.name.split(" ")[0]}`}>{m.id === lib.me.id ? "Leave team" : "Remove from team"}</ConfirmButton>
+                            </form>
+                          )}
                         </div>
                       </details>
                     )}
@@ -242,8 +284,9 @@ export default async function ProjectPage({ params, searchParams }: { params: Pa
               </form>
             )}
             <p className="faint" style={{ fontSize: 12, marginTop: 8 }}>
-              {manage ? "As " + (lib.me.role === "admin" ? "an admin" : "a team lead") + ", you can add people, remove them and choose leads. Anyone can join or leave on their own."
-                : "Team leads and admins can add people. You can join or leave on your own with the button at the top."}
+              {manage ? "As " + (lib.me.role === "admin" ? "an admin" : "a team lead") + ", you can add and remove people, choose leads, and edit every part, file and setting in this project. Only the owner or an admin can hand the team over."
+                : "Leads run the team: they add people, choose leads and can edit every part here. You can join or leave on your own."}
+              {!ownerId && members.length > 0 && " This team has no owner yet. An admin, or any lead, can take ownership from the menu next to a name."}
             </p>
           </section>
           <section className="mc-panel mc-glass">
@@ -262,9 +305,23 @@ export default async function ProjectPage({ params, searchParams }: { params: Pa
                 <BudgetBar used={budget.power} limit={project.power_budget_w} label="Power" />
               </div>
             </div>
-            <p className="faint" style={{ fontSize: 12 }}>Totals count only the parts that have a value. Set the team&apos;s budget in Project settings.</p>
+            <p className="faint" style={{ fontSize: 12 }}>Totals count only the parts that have a value. The team&apos;s leads set its budget in Project settings.</p>
           </section>
-          <section className="mc-panel mc-glass">
+          {manage && trash.length > 0 && (
+            <section className="mc-panel mc-glass">
+              <div className="mc-panel__head"><h2>Trash</h2><span className="mc-label">{trash.length}</span></div>
+              <div className="stack-sm">
+                {trash.map((t) => (
+                  <form key={t.id} action={restoreItem} className="spread">
+                    <input type="hidden" name="table" value={t.table} /><input type="hidden" name="id" value={t.id} /><input type="hidden" name="back" value={`/projects/${id}`} />
+                    <span style={{ fontSize: 13 }}><b>{t.name}</b> <span className="faint">{t.kind} · trashed {shortDate(t.deleted_at)}</span></span>
+                    <button className="mc-btn mc-btn--secondary mc-btn--sm" type="submit">Restore</button>
+                  </form>
+                ))}
+              </div>
+            </section>
+          )}
+          {manage ? <section className="mc-panel mc-glass">
             <details className="inline">
               <summary className="spread"><h2 style={{ fontSize: 16 }}>Project settings</h2><Icon name="chevron" /></summary>
               <form action={updateProject} className="form">
@@ -287,7 +344,7 @@ export default async function ProjectPage({ params, searchParams }: { params: Pa
                 <ConfirmButton confirmLabel={`Yes, trash ${project.name}`}>Move project to trash</ConfirmButton>
               </form>
             </details>
-          </section>
+          </section> : <p className="faint" style={{ fontSize: 12 }}>Only this team&apos;s leads and admins can change the project&apos;s settings.</p>}
         </div>
       </div>
     </>

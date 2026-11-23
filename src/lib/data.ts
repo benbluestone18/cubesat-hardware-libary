@@ -90,8 +90,19 @@ export const getLibrary = cache(async () => {
   };
 });
 
-export function canEdit(me: Person, c: Pick<Component, "owner_id">, editorIds: string[] = []): boolean {
-  return me.role === "admin" || c.owner_id === me.id || editorIds.includes(me.id);
+/** Leads of a team: what an admin can do, but only inside that team's project. */
+export function leadsTeam(me: Person, projectId: string, memberships: Membership[]): boolean {
+  return memberships.some((m) => m.project_id === projectId && m.person_id === me.id && m.lead);
+}
+
+/** Change a part: the admin, its owner, its editors and its project's leads. The database checks the same. */
+export function canEdit(me: Person, c: Pick<Component, "owner_id" | "project_id">, editorIds: string[] = [], memberships: Membership[] = []): boolean {
+  return canManagePart(me, c, memberships) || editorIds.includes(me.id);
+}
+
+/** Choose editors, hand off and trash a part: the admin, its owner and its project's leads. */
+export function canManagePart(me: Person, c: Pick<Component, "owner_id" | "project_id">, memberships: Membership[]): boolean {
+  return me.role === "admin" || c.owner_id === me.id || leadsTeam(me, c.project_id, memberships);
 }
 
 export type Library = Awaited<ReturnType<typeof getLibrary>>;
@@ -134,7 +145,7 @@ export async function getMemberships(): Promise<Membership[]> {
 
 /** Admins, and leads of this team, can add and remove people and choose leads. */
 export function canManageTeam(me: Person, projectId: string, memberships: Membership[]): boolean {
-  return me.role === "admin" || memberships.some((m) => m.project_id === projectId && m.person_id === me.id && m.lead);
+  return me.role === "admin" || leadsTeam(me, projectId, memberships);
 }
 
 /** Open issues on live parts, newest first. */

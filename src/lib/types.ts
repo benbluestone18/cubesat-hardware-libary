@@ -1,7 +1,7 @@
 import type { ComponentStatus } from "./status";
 
 export interface Person { id: string; name: string; email: string; avatar_url: string | null; role: "member" | "admin"; theme: "light" | "dark" | null; created_at: string }
-export interface Project { id: string; name: string; description: string; status: "active" | "paused" | "done"; created_by: string; created_at: string; deleted_at: string | null; mass_budget_g: number | null; power_budget_w: number | null }
+export interface Project { id: string; name: string; description: string; status: "active" | "paused" | "done"; created_by: string; owner_id: string | null; created_at: string; deleted_at: string | null; mass_budget_g: number | null; power_budget_w: number | null }
 export interface Folder { id: string; project_id: string; parent_id: string | null; name: string; deleted_at: string | null }
 export interface Component {
   id: string; project_id: string; folder_id: string | null; name: string; description: string; owner_id: string;
