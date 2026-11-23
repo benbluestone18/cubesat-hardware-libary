@@ -2,7 +2,7 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { SCHOOL_DOMAIN, emailSignInEnabled } from "@/lib/env";
+import { SCHOOL_DOMAIN, emailSignInEnabled, googleSignInEnabled } from "@/lib/env";
 import { safePath, str } from "./util";
 
 /** The site's own address, for the link Google or the email sends people back to. */
@@ -20,6 +20,8 @@ function callback(base: string, next: string) {
 
 export async function signInWithGoogle(form: FormData) {
   const next = safePath(str(form, "next"), "/");
+  // A server action can be called even when its button is hidden, so check here too.
+  if (!googleSignInEnabled()) redirect(`/login?error=${encodeURIComponent("Google sign-in is turned off. Use your school email instead.")}`);
   const supabase = await createClient();
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: "google",
@@ -43,7 +45,7 @@ export async function sendEmailLink(_prev: EmailLinkState, form: FormData): Prom
   const next = safePath(str(form, "next"), "/");
   const email = str(form, "email", 200).toLowerCase();
   const fail = (message: string, retryAt?: number): EmailLinkState => ({ status: "error", message, email, retryAt });
-  if (!emailSignInEnabled()) return fail("Email sign-in is turned off. Use Google.");
+  if (!emailSignInEnabled()) return fail("Email sign-in is turned off. Use Continue with Google.");
   if (!email.endsWith("@" + SCHOOL_DOMAIN)) return fail(`Use your @${SCHOOL_DOMAIN} school email.`);
   const supabase = await createClient();
   const { error } = await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: callback(await origin(), next) } });
@@ -53,7 +55,7 @@ export async function sendEmailLink(_prev: EmailLinkState, form: FormData): Prom
       const left = /(\d+)\s*second/i.exec(error.message)?.[1];
       if (left) return fail("A link was already sent to this address in the last minute. Check your inbox and spam before asking for another.", Date.now() + Number(left) * 1000);
       // Otherwise the whole site hit its hourly email limit.
-      return fail("The library has sent too many sign-in emails this hour. Try again later, or use Google.", Date.now() + 60_000);
+      return fail("The library has sent too many sign-in emails this hour. Try again in a little while.", Date.now() + 60_000);
     }
     return fail("Couldn't send the email. Wait a minute and try again, or tell the admin.");
   }
