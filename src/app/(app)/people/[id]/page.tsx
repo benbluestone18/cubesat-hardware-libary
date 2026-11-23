@@ -69,7 +69,7 @@ export default async function Profile({ params, searchParams }: { params: Params
           </div>
           {isMe && (
             <form action={updateMyName} className="mc-panel mc-glass form">
-              <label className="field"><span>Your name on the team</span><input className="input" name="name" defaultValue={person.name} required maxLength={80} /><small>Your photo comes from your Google account.</small></label>
+              <label className="field"><span>Your name on the team</span><input className="input" name="name" defaultValue={person.name} required maxLength={80} /><small>This is what your teammates see, and what they type to @mention you.</small></label>
               <div className="form-actions"><button className="mc-btn mc-btn--secondary mc-btn--sm" type="submit">Save name</button></div>
             </form>
           )}

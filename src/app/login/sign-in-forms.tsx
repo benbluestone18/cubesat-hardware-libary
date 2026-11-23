@@ -49,10 +49,10 @@ function useSecondsLeft(until: number | undefined): number {
   return until ? Math.max(0, Math.ceil((until - now) / 1000)) : 0;
 }
 
-function SendButton({ wait, label }: { wait: number; label: string }) {
+function SendButton({ wait, label, primary }: { wait: number; label: string; primary?: boolean }) {
   const { pending } = useFormStatus();
   return (
-    <button className="mc-btn mc-btn--secondary" type="submit" disabled={pending || wait > 0} aria-busy={pending}>
+    <button className={`mc-btn ${primary ? "mc-btn--primary" : "mc-btn--secondary"}`} type="submit" disabled={pending || wait > 0} aria-busy={pending}>
       {pending ? <><Spinner /> Sending link…</> : wait > 0 ? `${label} in ${wait}s` : label}
     </button>
   );
@@ -60,7 +60,7 @@ function SendButton({ wait, label }: { wait: number; label: string }) {
 
 const IDLE: EmailLinkState = { status: "idle" };
 
-export function EmailForm({ next, domain }: { next: string; domain: string }) {
+export function EmailForm({ next, domain, primary }: { next: string; domain: string; primary?: boolean }) {
   const [state, send] = useActionState(sendEmailLink, IDLE);
   // The retry time of a "sent" result the person chose to leave, to type a different address.
   const [left, setLeft] = useState<number | null>(null);
@@ -95,7 +95,7 @@ export function EmailForm({ next, domain }: { next: string; domain: string }) {
         <span>School email</span>
         <input className="input" type="email" name="email" required autoComplete="email" defaultValue={email} key={email} placeholder={`you@${domain}`} pattern={`.+@${domain.replace(/\./g, "\\.")}$`} title={`Use your @${domain} email`} />
       </label>
-      <SendButton wait={state.status === "error" ? wait : 0} label="Email me a link" />
+      <SendButton wait={state.status === "error" ? wait : 0} label="Email me a link" primary={primary} />
     </form>
   );
 }
