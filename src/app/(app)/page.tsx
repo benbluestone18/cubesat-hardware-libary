@@ -1,10 +1,10 @@
 import Link from "next/link";
-import { getLibrary, peopleHealth, recentUpdates } from "@/lib/data";
+import { getLibrary, myMentions, openIssues, peopleHealth, recentUpdates } from "@/lib/data";
 import { createClient } from "@/lib/supabase/server";
 import { byUrgency, HEALTH_LABEL, type Health } from "@/lib/status";
 import { ago, weekLabel, weekRange, weekStart } from "@/lib/week";
 import { StaleAlert, UpdateEntry } from "@/components/cards";
-import { Face, State, Empty } from "@/components/ui";
+import { CommentBody, Face, State, Empty } from "@/components/ui";
 import { Icon, StatusIcon } from "@/components/icons";
 import { Flash, PageTitle, type SP } from "@/components/flash";
 
@@ -13,11 +13,15 @@ export default async function Feed({ searchParams }: { searchParams: SP }) {
   const lib = await getLibrary();
   const thisWeek = weekStart();
   const supabase = await createClient();
-  const [updates, people, { data: week }] = await Promise.all([
+  const [updates, people, { data: week }, mentions, issues] = await Promise.all([
     recentUpdates(lib, { limit: 25 }),
     peopleHealth(lib),
     supabase.from("weeks").select("*").eq("week_start", thisWeek).maybeSingle(),
+    myMentions(lib, 6),
+    openIssues(lib),
   ]);
+  const names = lib.people.map((p) => ({ id: p.id, name: p.name }));
+  const partOf = (cid: string) => lib.components.find((c) => c.id === cid);
 
   const active = lib.components.filter((c) => c.status !== "released" && c.status !== "built");
   const alerts = active.filter((c) => c.health.health === "stalled" || c.health.health === "warn").sort(byUrgency);
@@ -98,6 +102,41 @@ export default async function Feed({ searchParams }: { searchParams: SP }) {
         </div>
 
         <div className="stack">
+          {mentions.length > 0 && (
+            <section className="mc-panel mc-glass">
+              <div className="mc-panel__head"><h2>Mentioned you</h2><span className="mc-label">{mentions.length}</span></div>
+              <div className="stack-sm">
+                {mentions.map((m) => {
+                  const part = partOf(m.component_id); const who = lib.person.get(m.author_id);
+                  return (
+                    <Link key={m.id} className="mention-item" href={`/components/${m.component_id}#c-${m.id}`}>
+                      <span className="faint" style={{ fontSize: 12 }}>{who?.name.split(" ")[0] ?? "Someone"} on {part?.name} · {ago(m.created_at)}</span>
+                      <span className="mention-item__body"><CommentBody body={m.body.length > 160 ? m.body.slice(0, 160) + "…" : m.body} people={names} plain /></span>
+                    </Link>
+                  );
+                })}
+              </div>
+            </section>
+          )}
+
+          {issues.length > 0 && (
+            <section className="mc-panel mc-glass">
+              <div className="mc-panel__head"><h2>Open issues</h2><span className="issue-count">{issues.length}</span></div>
+              <div className="stack-sm">
+                {issues.slice(0, 8).map((m) => {
+                  const part = partOf(m.component_id);
+                  return (
+                    <Link key={m.id} className="mention-item" href={`/components/${m.component_id}#c-${m.id}`}>
+                      <span className="faint" style={{ fontSize: 12 }}>{part?.name} · {lib.person.get(m.author_id)?.name.split(" ")[0]} · {ago(m.created_at)}</span>
+                      <span className="mention-item__body">{m.body.length > 120 ? m.body.slice(0, 120) + "…" : m.body}</span>
+                    </Link>
+                  );
+                })}
+                {issues.length > 8 && <p className="faint" style={{ fontSize: 13 }}>And {issues.length - 8} more on the project boards.</p>}
+              </div>
+            </section>
+          )}
+
           <section className="mc-panel mc-glass">
             <div className="mc-panel__head"><h2>This week&apos;s meeting</h2><span className="mc-label">{weekLabel(thisWeek)}</span></div>
             {week?.slides_url

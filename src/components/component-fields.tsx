@@ -33,6 +33,17 @@ export function ComponentFields({ lib, projectId, c, folderId }: { lib: Library;
           <input className="input" name="revision" maxLength={12} defaultValue={c?.revision ?? "A"} />
         </label>
       </div>
+      <div className="row" style={{ alignItems: "flex-start", gap: 16 }}>
+        <label className="field" style={{ flex: 1, minWidth: 140 }}>
+          <span>Mass (g)</span>
+          <input className="input" name="mass_g" type="number" inputMode="decimal" min={0} max={100000} step="any" defaultValue={c?.mass_g ?? ""} placeholder="Optional" />
+        </label>
+        <label className="field" style={{ flex: 1, minWidth: 140 }}>
+          <span>Power draw (W)</span>
+          <input className="input" name="power_w" type="number" inputMode="decimal" min={0} max={1000} step="any" defaultValue={c?.power_w ?? ""} placeholder="Optional" />
+        </label>
+      </div>
+      <small className="faint" style={{ marginTop: -8 }}>Both optional. They add up into each team&apos;s budget and the satellite total. Use average power draw, in watts (0.35 for 350 mW).</small>
       <label className="field">
         <span>Onshape link</span>
         <input className="input" name="onshape_url" type="url" maxLength={1000} defaultValue={c?.onshape_url ?? ""} placeholder="https://cad.onshape.com/documents/…" pattern="https://([a-z0-9-]+\.)*onshape\.com/.*" title="A link on onshape.com" />

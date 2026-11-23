@@ -2,6 +2,8 @@ import Link from "next/link";
 import { StatusIcon } from "./icons";
 import { HEALTH_LABEL, STATUS_LABEL, STATUS_STEP, type ComponentStatus, type Health, type HealthResult } from "@/lib/status";
 import type { Person } from "@/lib/types";
+import { splitMentions } from "@/lib/mentions";
+import { fill } from "@/lib/budget";
 
 export function initials(name: string): string {
   const parts = name.trim().split(/\s+/);
@@ -45,4 +47,26 @@ export function Track({ status, health }: { status: ComponentStatus; health: Hea
 
 export function Empty({ children, action }: { children: React.ReactNode; action?: React.ReactNode }) {
   return <div className="empty"><p>{children}</p>{action}</div>;
+}
+
+/** A comment's text with @mentions turned into links to the person. */
+export function CommentBody({ body, people, plain = false }: { body: string; people: { id: string; name: string }[]; plain?: boolean }) {
+  return (
+    <>
+      {splitMentions(body, people).map((part, i) => "person" in part
+        ? plain ? <b key={i} className="mention-link">{part.text}</b> : <Link key={i} className="mention-link" href={`/people/${part.person.id}`}>{part.text}</Link>
+        : <span key={i}>{part.text}</span>)}
+    </>
+  );
+}
+
+/** A thin bar showing how much of a budget is used. */
+export function BudgetBar({ used, limit, label }: { used: number; limit: number | null; label: string }) {
+  const f = fill(used, limit);
+  if (!f) return null;
+  return (
+    <span className={`budget-bar budget-bar--${f.tone}`} role="img" aria-label={`${label}: ${Math.round(f.pct)}% of the budget`}>
+      <i style={{ width: `${Math.min(100, f.pct)}%` }} />
+    </span>
+  );
 }

@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { getLibrary, getMemberships } from "@/lib/data";
+import { getLibrary, getMemberships, getMission } from "@/lib/data";
+import { grams, sumBudget, watts } from "@/lib/budget";
 import { worst } from "@/lib/status";
-import { createProject } from "@/app/actions/projects";
-import { Face, State, Empty } from "@/components/ui";
+import { createProject, setMissionLimits } from "@/app/actions/projects";
+import { BudgetBar, Face, State, Empty } from "@/components/ui";
 import { Icon } from "@/components/icons";
 import { Flash, PageTitle, type SP } from "@/components/flash";
 
@@ -13,7 +14,11 @@ const PROJECT_STATUS = { active: "Active", paused: "Paused", done: "Done" } as c
 
 export default async function Projects({ searchParams }: { searchParams: SP }) {
   const sp = await searchParams;
-  const [lib, memberships] = await Promise.all([getLibrary(), getMemberships()]);
+  const [lib, memberships, mission] = await Promise.all([getLibrary(), getMemberships(), getMission()]);
+  const total = sumBudget(lib.components);
+  const rows = lib.projects.map((p) => ({ p, b: sumBudget(lib.components.filter((c) => c.project_id === p.id)) }));
+  const allocated = { mass: rows.reduce((n, r) => n + Number(r.p.mass_budget_g ?? 0), 0), power: rows.reduce((n, r) => n + Number(r.p.power_budget_w ?? 0), 0) };
+  const isAdmin = lib.me.role === "admin";
   return (
     <>
       <PageTitle title="Projects" sub="Each hardware area of the satellite. Anyone on the team can add a project or folder.">
@@ -54,6 +59,54 @@ export default async function Projects({ searchParams }: { searchParams: SP }) {
             );
           })}
         </div>
+      )}
+
+      {lib.projects.length > 0 && (
+        <section className="mc-panel mc-glass" id="budget">
+          <div className="mc-panel__head"><h2>Mass and power budget</h2><span className="mc-label">Whole satellite</span></div>
+          <div className="budget-grid">
+            <div>
+              <small>Total mass</small>
+              <b className={mission.mass_limit_g && total.mass > Number(mission.mass_limit_g) ? "over" : undefined}>{grams(total.mass)}</b>
+              <small>{mission.mass_limit_g ? `of ${grams(mission.mass_limit_g)} limit` : "No limit set"} · {total.withMass} of {total.parts} parts weighed</small>
+              <BudgetBar used={total.mass} limit={mission.mass_limit_g} label="Satellite mass" />
+            </div>
+            <div>
+              <small>Total power draw</small>
+              <b className={mission.power_limit_w && total.power > Number(mission.power_limit_w) ? "over" : undefined}>{watts(total.power)}</b>
+              <small>{mission.power_limit_w ? `of ${watts(mission.power_limit_w)} limit` : "No limit set"} · {total.withPower} of {total.parts} parts measured</small>
+              <BudgetBar used={total.power} limit={mission.power_limit_w} label="Satellite power" />
+            </div>
+          </div>
+          <div className="table-wrap">
+            <table className="table">
+              <thead><tr><th>Team</th><th>Mass</th><th>Mass budget</th><th>Power</th><th>Power budget</th></tr></thead>
+              <tbody>
+                {rows.map(({ p, b }) => (
+                  <tr key={p.id}>
+                    <td><Link className="link" href={`/projects/${p.id}`}>{p.name}</Link></td>
+                    <td className={`mc-data${p.mass_budget_g && b.mass > Number(p.mass_budget_g) ? " over" : ""}`}>{grams(b.mass)}</td>
+                    <td className="mc-data muted">{grams(p.mass_budget_g)}</td>
+                    <td className={`mc-data${p.power_budget_w && b.power > Number(p.power_budget_w) ? " over" : ""}`}>{watts(b.power)}</td>
+                    <td className="mc-data muted">{watts(p.power_budget_w)}</td>
+                  </tr>
+                ))}
+                <tr>
+                  <td><b>Allocated to teams</b></td><td /><td className={`mc-data${mission.mass_limit_g && allocated.mass > Number(mission.mass_limit_g) ? " over" : ""}`}>{allocated.mass ? grams(allocated.mass) : "—"}</td>
+                  <td /><td className={`mc-data${mission.power_limit_w && allocated.power > Number(mission.power_limit_w) ? " over" : ""}`}>{allocated.power ? watts(allocated.power) : "—"}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p className="faint" style={{ fontSize: 12 }}>Totals count only parts with a value. Each team sets its own budget in its Project settings.</p>
+          {isAdmin && (
+            <form action={setMissionLimits} className="row" style={{ alignItems: "flex-end", gap: 12, flexWrap: "wrap" }}>
+              <label className="field" style={{ flex: 1, minWidth: 140 }}><span>Satellite mass limit (g)</span><input className="input" name="mass_limit_g" type="number" min={0} step="any" defaultValue={mission.mass_limit_g ?? ""} placeholder="Optional" /></label>
+              <label className="field" style={{ flex: 1, minWidth: 140 }}><span>Satellite power limit (W)</span><input className="input" name="power_limit_w" type="number" min={0} step="any" defaultValue={mission.power_limit_w ?? ""} placeholder="Optional" /></label>
+              <button className="mc-btn mc-btn--secondary" type="submit">Save limits</button>
+            </form>
+          )}
+        </section>
       )}
     </>
   );

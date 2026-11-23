@@ -1,7 +1,7 @@
 -- Permission rules, checked against the real database. Run with: npx supabase test db
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(41);
+select plan(52);
 
 -- Start from an empty library, even when local test data is loaded. All of this rolls back.
 truncate public.activity_log, public.comments, public.updates, public.files, public.component_editors, public.components,
@@ -124,13 +124,44 @@ select throws_ok($$ insert into component_links (component_id, url, label) value
 select pg_temp.act_as('00000000-0000-0000-0000-00000000000d');
 select is((select count(*)::int from component_links), 1, 'Everyone can see links');
 
+-- Issues: posted as comments; the author, the part's editors and admins resolve them
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000d');
+insert into comments (id, component_id, body, is_issue, resolved_at) values ('50000000-0000-0000-0000-000000000001', '30000000-0000-0000-0000-000000000001', 'Mount cracks at 40 g', true, now());
+select is((select resolved_at from comments where id = '50000000-0000-0000-0000-000000000001'), null, 'A new issue always starts open');
+update comments set resolved_at = now() where id = '50000000-0000-0000-0000-000000000001';
+select is((select resolved_by from comments where id = '50000000-0000-0000-0000-000000000001'), '00000000-0000-0000-0000-00000000000d'::uuid, 'The author can resolve their issue, and the database records who');
+update comments set resolved_at = null where id = '50000000-0000-0000-0000-000000000001';
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000c');
+update comments set resolved_at = now() where id = '50000000-0000-0000-0000-000000000001';
+select is((select resolved_by from comments where id = '50000000-0000-0000-0000-000000000001'), '00000000-0000-0000-0000-00000000000c'::uuid, 'An editor of the part can resolve someone else''s issue');
+select throws_ok($$ update comments set body = 'changed' where id = '50000000-0000-0000-0000-000000000001' $$, 'P0001', 'Only the author can change a comment', 'An editor cannot rewrite someone else''s comment');
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000b');
+insert into comments (id, component_id, body, is_issue) values ('50000000-0000-0000-0000-000000000002', '30000000-0000-0000-0000-000000000001', 'Need wheel dimensions', true);
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000d');
+update comments set resolved_at = now() where id = '50000000-0000-0000-0000-000000000002';
+select is((select resolved_at from comments where id = '50000000-0000-0000-0000-000000000002'), null, 'Someone who cannot edit the part cannot resolve another person''s issue');
+
+-- Mentions: only the comment's author records who it mentions
+select lives_ok($$ insert into comment_mentions (comment_id, person_id) values ('50000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-00000000000b') $$, 'An author can mention people in their comment');
+select throws_ok($$ insert into comment_mentions (comment_id, person_id) values ('50000000-0000-0000-0000-000000000002', '00000000-0000-0000-0000-00000000000c') $$, '42501', null, 'Nobody can add mentions to someone else''s comment');
+
+-- Mass and power
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000b');
+select lives_ok($$ update components set mass_g = 42.5, power_w = 0.35 where id = '30000000-0000-0000-0000-000000000001' $$, 'The owner can set mass and power');
+select throws_ok($$ update components set mass_g = -1 where id = '30000000-0000-0000-0000-000000000001' $$, '23514', null, 'Mass cannot be negative');
+update mission set mass_limit_g = 1 where id;
+select is((select mass_limit_g from mission), null, 'A member cannot change the satellite limits');
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
+update mission set mass_limit_g = 4000 where id;
+select is((select mass_limit_g from mission), 4000.00, 'The admin sets the satellite limits');
+
 -- Search, activity, signed-out
 select ok((select count(*) from search_library('wheel')) >= 2, 'Search finds the component and its folder');
 select ok((select count(*) from activity_log where action in ('trashed','restored') and entity = 'folders') = 2, 'Trashing and restoring are logged');
 select pg_temp.reset_role();
 select ok((select last_update_at is not null from components where id = '30000000-0000-0000-0000-000000000001'), 'Posting an update refreshes the component');
 insert into updates (component_id, author_id, week_start, done) values
-  ('30000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-00000000000b', date_trunc('week', now())::date - 7, 'older');
+  ('30000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-00000000000b', '2026-11-02', 'older');
 select is((select done from latest_updates where component_id = '30000000-0000-0000-0000-000000000001'), (select done from updates where component_id = '30000000-0000-0000-0000-000000000001' order by week_start desc limit 1), 'latest_updates picks the newest week');
 select is((select count(*)::int from latest_updates where component_id = '30000000-0000-0000-0000-000000000001'), 1, 'latest_updates has one row per component');
 set local role anon;

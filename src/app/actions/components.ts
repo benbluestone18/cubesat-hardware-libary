@@ -3,6 +3,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { STATUS_ORDER } from "@/lib/status";
+import { findMentions } from "@/lib/mentions";
 import { back, explain, optional, str } from "./util";
 
 async function ctx() {
@@ -21,6 +22,22 @@ function onshape(url: string | null): string | null | false {
   }
 }
 
+/** An optional number field: null when blank, false when it isn't a usable number. */
+function amount(form: FormData, key: string, max: number): number | null | false {
+  const raw = str(form, key, 40).replace(",", ".");
+  if (!raw) return null;
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 0 && n <= max ? n : false;
+}
+
+function budget(form: FormData, retry: string) {
+  const mass_g = amount(form, "mass_g", 100000);
+  const power_w = amount(form, "power_w", 1000);
+  if (mass_g === false) back(retry, "Mass must be a number of grams between 0 and 100000");
+  if (power_w === false) back(retry, "Power must be a number of watts between 0 and 1000");
+  return { mass_g, power_w };
+}
+
 function status(v: string) {
   return (STATUS_ORDER as string[]).includes(v) ? v : "planned";
 }
@@ -34,7 +51,9 @@ export async function createComponent(form: FormData) {
   if (!project_id) back(retry, "Pick a project");
   if (!name) back(retry, "Give the part a name");
   if (link === false) back(retry, "The Onshape link must start with https:// and be on onshape.com");
+  const sizes = budget(form, retry);
   const { data, error } = await supabase.from("components").insert({
+    ...sizes,
     project_id, folder_id: optional(form, "folder_id"), name, owner_id: me,
     description: str(form, "description", 4000), status: status(str(form, "status")),
     onshape_url: link, revision: str(form, "revision", 12) || "A",
@@ -49,7 +68,9 @@ export async function updateComponent(form: FormData) {
   const id = str(form, "id");
   const link = onshape(optional(form, "onshape_url", 1000));
   if (link === false) back(`/components/${id}/edit`, "The Onshape link must start with https:// and be on onshape.com");
+  const sizes = budget(form, `/components/${id}/edit`);
   const { error } = await supabase.from("components").update({
+    ...sizes,
     name: str(form, "name", 120), description: str(form, "description", 4000), status: status(str(form, "status")),
     onshape_url: link, revision: str(form, "revision", 12) || "A", folder_id: optional(form, "folder_id"),
   }).eq("id", id).select("id").single();
@@ -108,10 +129,25 @@ export async function addComment(form: FormData) {
   const { supabase, me } = await ctx();
   const id = str(form, "component_id");
   const body = str(form, "body", 4000);
-  if (!body) back(`/components/${id}#comments`, "Write a comment first");
-  const { error } = await supabase.from("comments").insert({ component_id: id, author_id: me, body });
-  if (error) back(`/components/${id}`, explain(error));
-  revalidatePath(`/components/${id}`);
+  const is_issue = str(form, "is_issue") === "on";
+  if (!body) back(`/components/${id}#comments`, is_issue ? "Describe the issue first" : "Write a comment first");
+  const { data, error } = await supabase.from("comments").insert({ component_id: id, author_id: me, body, is_issue }).select("id").single();
+  if (error || !data) back(`/components/${id}`, explain(error));
+  const { data: people } = await supabase.from("people").select("id, name");
+  const mentioned = findMentions(body, people ?? []).filter((p) => p !== me);
+  if (mentioned.length) await supabase.from("comment_mentions").insert(mentioned.map((person_id) => ({ comment_id: data.id, person_id })));
+  revalidatePath("/", "layout");
+}
+
+/** Resolve or reopen an issue. The database decides who may, and records who did. */
+export async function setIssue(form: FormData) {
+  const { supabase } = await ctx();
+  const component_id = str(form, "component_id");
+  const resolve = str(form, "resolve") === "true";
+  const { data, error } = await supabase.from("comments").update({ resolved_at: resolve ? new Date().toISOString() : null })
+    .eq("id", str(form, "id")).eq("is_issue", true).select("id");
+  if (error || !data?.length) back(`/components/${component_id}#comments`, error ? explain(error) : "Only the person who raised it, the part's editors or an admin can change this issue");
+  revalidatePath("/", "layout");
 }
 
 export async function deleteComment(form: FormData) {
