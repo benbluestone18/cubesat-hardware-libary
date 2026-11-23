@@ -13,7 +13,6 @@ const RAIL = [
   { href: "/", icon: "home", label: "Feed" },
   { href: "/projects", icon: "folder", label: "Projects" },
   { href: "/people", icon: "team", label: "People" },
-  { href: "/weeks", icon: "meeting", label: "Weekly meetings" },
   { href: "/search", icon: "search", label: "Search" },
 ];
 
@@ -24,7 +23,7 @@ export function Rail({ admin }: { admin: boolean }) {
     <nav className="mc-rail mc-glass" aria-label="Main">
       {items.map((i, n) => (
         <span key={i.href} style={{ display: "contents" }}>
-          {n === 5 && <span className="mc-rail__sep" />}
+          {n === RAIL.length && <span className="mc-rail__sep" />}
           <Link className="mc-icon-btn" href={i.href} prefetch aria-label={i.label} title={i.label} aria-current={active(path, i.href) ? "page" : undefined}>
             <Icon name={i.icon} />
           </Link>

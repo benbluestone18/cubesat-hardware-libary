@@ -1,24 +1,21 @@
 import Link from "next/link";
 import { getLibrary, myMentions, openIssues, peopleHealth, recentUpdates } from "@/lib/data";
-import { createClient } from "@/lib/supabase/server";
 import { byUrgency, HEALTH_LABEL, type Health } from "@/lib/status";
 import { ago, weekLabel, weekRange, weekStart } from "@/lib/week";
 import { StaleAlert, UpdateEntry } from "@/components/cards";
 import { CommentBody, Face, State, Empty } from "@/components/ui";
-import { Icon, StatusIcon } from "@/components/icons";
+import { StatusIcon } from "@/components/icons";
 import { Flash, PageTitle, type SP } from "@/components/flash";
 
 export default async function Feed({ searchParams }: { searchParams: SP }) {
   const sp = await searchParams;
   const thisWeek = weekStart();
-  const supabase = await createClient();
   // One round trip: every query starts now, instead of waiting for the library first.
   const libP = getLibrary();
-  const [lib, updates, people, { data: week }, mentions, issues] = await Promise.all([
+  const [lib, updates, people, mentions, issues] = await Promise.all([
     libP,
     recentUpdates(libP, { limit: 25 }),
     peopleHealth(libP),
-    supabase.from("weeks").select("*").eq("week_start", thisWeek).maybeSingle(),
     myMentions(libP, 6),
     openIssues(libP),
   ]);
@@ -93,7 +90,7 @@ export default async function Feed({ searchParams }: { searchParams: SP }) {
           )}
 
           <section className="mc-panel mc-glass">
-            <div className="mc-panel__head"><h2>Latest updates</h2><Link className="mc-btn mc-btn--ghost mc-btn--sm" href="/weeks">By week</Link></div>
+            <div className="mc-panel__head"><h2>Latest updates</h2></div>
             {updates.length === 0
               ? <Empty action={<Link className="mc-btn mc-btn--primary mc-btn--sm" href="/updates/new">Post the first update</Link>}>No updates yet. Each week, everyone posts three lines per part: done, next and blocked.</Empty>
               : <div style={{ paddingTop: 8 }}>{updates.map((u, i) => {
@@ -138,14 +135,6 @@ export default async function Feed({ searchParams }: { searchParams: SP }) {
               </div>
             </section>
           )}
-
-          <section className="mc-panel mc-glass">
-            <div className="mc-panel__head"><h2>This week&apos;s meeting</h2><span className="mc-label">{weekLabel(thisWeek)}</span></div>
-            {week?.slides_url
-              ? <a className="mc-btn mc-btn--secondary" href={week.slides_url} target="_blank" rel="noreferrer"><Icon name="external" /> Open the slides</a>
-              : <p className="muted" style={{ fontSize: 13 }}>No slides linked yet.</p>}
-            <Link className="link" href={`/weeks/${thisWeek}`} style={{ fontSize: 13 }}>Agenda and everyone&apos;s updates</Link>
-          </section>
 
           <section className="mc-panel mc-glass">
             <div className="mc-panel__head"><h2>Team</h2><Link className="mc-btn mc-btn--ghost mc-btn--sm" href="/people">All people</Link></div>
