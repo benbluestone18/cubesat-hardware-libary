@@ -6,13 +6,14 @@ import { createClient } from "@/lib/supabase/server";
 import { STATUS_LABEL, STATUS_ORDER } from "@/lib/status";
 import type { Comment, ComponentLink, FileRow, Update } from "@/lib/types";
 import { ago, shortDate, weekStart } from "@/lib/week";
-import { addComment, addEditor, deleteComment, handOff, removeEditor, setStatus } from "@/app/actions/components";
+import { addComment, addEditor, deleteComment, handOff, removeEditor, setIssue, setStatus } from "@/app/actions/components";
 import { addLink, removeLink, trashFile } from "@/app/actions/files";
 import { UpdateEntry } from "@/components/cards";
-import { Face, HealthState, Track, Empty } from "@/components/ui";
+import { CommentBody, Face, HealthState, Track, Empty } from "@/components/ui";
 import { Icon } from "@/components/icons";
 import { ConfirmButton } from "@/components/client";
-import { FileUpload } from "@/components/forms";
+import { FileUpload, MentionTextarea } from "@/components/forms";
+import { grams, watts } from "@/lib/budget";
 import { Flash, PageTitle, type SP } from "@/components/flash";
 
 type Params = Promise<{ id: string }>;
@@ -56,6 +57,9 @@ export default async function ComponentPage({ params, searchParams }: { params: 
   for (const f of (files ?? []) as FileRow[]) byRev.set(f.revision, [...(byRev.get(f.revision) ?? []), f]);
   const others = lib.people.filter((p) => p.id !== c.owner_id && !editorIds.includes(p.id));
   const project = lib.project.get(c.project_id)!;
+  const allComments = (comments ?? []) as Comment[];
+  const openIssues = allComments.filter((m) => m.is_issue && !m.resolved_at);
+  const names = lib.people.map((p) => ({ id: p.id, name: p.name }));
 
   return (
     <>
@@ -64,6 +68,7 @@ export default async function ComponentPage({ params, searchParams }: { params: 
         title={c.name}
         sub={c.description || undefined}
       >
+        {openIssues.length > 0 && <a className="mc-btn mc-btn--secondary" href="#comments"><span className="issue-count">{openIssues.length}</span> open {openIssues.length === 1 ? "issue" : "issues"}</a>}
         {c.onshape_url && <a className="mc-btn mc-btn--secondary" href={c.onshape_url} target="_blank" rel="noreferrer"><Icon name="external" /> Onshape</a>}
         {mayEdit && <Link className="mc-btn mc-btn--secondary" href={`/components/${id}/edit`}><Icon name="edit" /> Edit</Link>}
         {mayEdit && <Link className="mc-btn mc-btn--primary" href={`/updates/new?component=${id}`}><Icon name="plus" /> {postedThisWeek ? "Edit this week's update" : "Post update"}</Link>}
@@ -94,31 +99,54 @@ export default async function ComponentPage({ params, searchParams }: { params: 
           </section>
 
           <section className="mc-panel mc-glass" id="comments">
-            <div className="mc-panel__head"><h2>Comments</h2><span className="mc-label">{comments?.length ?? 0}</span></div>
-            {((comments ?? []) as Comment[]).map((m) => {
+            <div className="mc-panel__head">
+              <h2>Comments and issues</h2>
+              <span className="row" style={{ gap: 6 }}>
+                {openIssues.length > 0 && <span className="issue-count">{openIssues.length} open</span>}
+                <span className="mc-label">{allComments.length}</span>
+              </span>
+            </div>
+            {allComments.map((m) => {
               const who = lib.person.get(m.author_id);
+              const open = m.is_issue && !m.resolved_at;
+              const mayResolve = m.is_issue && (m.author_id === lib.me.id || mayEdit);
               return (
-                <div className="comment" key={m.id}>
+                <div className={`comment${open ? " comment--issue-open" : ""}`} key={m.id} id={`c-${m.id}`}>
                   {who ? <Face person={who} size={32} /> : <span />}
                   <div>
                     <div className="comment__head">
                       <b>{who?.name ?? "Someone"}</b><span className="faint" style={{ fontSize: 12 }}>{shortDate(m.created_at)}</span>
-                      {(m.author_id === lib.me.id || moderates) && (
-                        <form action={deleteComment} style={{ marginLeft: "auto" }}>
-                          <input type="hidden" name="id" value={m.id} /><input type="hidden" name="component_id" value={id} />
-                          <ConfirmButton className="mc-btn mc-btn--ghost mc-btn--sm" confirmLabel="Delete">Delete</ConfirmButton>
-                        </form>
-                      )}
+                      {m.is_issue && (open
+                        ? <span className="issue-tag issue-tag--open">Open issue</span>
+                        : <span className="issue-tag issue-tag--done" title={m.resolved_at ? `Resolved ${shortDate(m.resolved_at)}` : undefined}>Resolved{m.resolved_by ? ` by ${lib.person.get(m.resolved_by)?.name.split(" ")[0] ?? "someone"}` : ""}</span>)}
+                      <span className="row" style={{ marginLeft: "auto", gap: 4 }}>
+                        {mayResolve && (
+                          <form action={setIssue}>
+                            <input type="hidden" name="id" value={m.id} /><input type="hidden" name="component_id" value={id} />
+                            <input type="hidden" name="resolve" value={open ? "true" : "false"} />
+                            <button className="mc-btn mc-btn--secondary mc-btn--sm" type="submit">{open ? "Resolve" : "Reopen"}</button>
+                          </form>
+                        )}
+                        {(m.author_id === lib.me.id || moderates) && (
+                          <form action={deleteComment}>
+                            <input type="hidden" name="id" value={m.id} /><input type="hidden" name="component_id" value={id} />
+                            <ConfirmButton className="mc-btn mc-btn--ghost mc-btn--sm" confirmLabel="Delete">Delete</ConfirmButton>
+                          </form>
+                        )}
+                      </span>
                     </div>
-                    <p className="comment__body">{m.body}</p>
+                    <p className="comment__body"><CommentBody body={m.body} people={names} /></p>
                   </div>
                 </div>
               );
             })}
             <form action={addComment} className="stack-sm">
               <input type="hidden" name="component_id" value={id} />
-              <textarea className="textarea" name="body" required maxLength={4000} placeholder="Ask a question or leave a note. Anyone on the team can comment." aria-label="Comment" />
-              <div className="form-actions"><button className="mc-btn mc-btn--secondary mc-btn--sm" type="submit">Comment</button></div>
+              <MentionTextarea people={names} name="body" required maxLength={4000} ariaLabel="Comment" placeholder="Ask a question or leave a note. Type @ to mention someone." />
+              <div className="spread">
+                <label className="check"><input type="checkbox" name="is_issue" /> This is an issue (a problem to fix)</label>
+                <button className="mc-btn mc-btn--secondary mc-btn--sm" type="submit">Post</button>
+              </div>
             </form>
           </section>
         </div>
@@ -131,6 +159,8 @@ export default async function ComponentPage({ params, searchParams }: { params: 
               <dt>Editors</dt><dd>{editors.length ? editors.map((e) => e!.name).join(", ") : <span className="faint">Only the owner</span>}</dd>
               <dt>Status</dt><dd>{STATUS_LABEL[c.status]}</dd>
               <dt>Revision</dt><dd className="mc-data">{c.revision.toUpperCase()}</dd>
+              <dt>Mass</dt><dd className="mc-data">{c.mass_g != null ? grams(c.mass_g) : <span className="faint">Not set</span>}</dd>
+              <dt>Power</dt><dd className="mc-data">{c.power_w != null ? watts(c.power_w) : <span className="faint">Not set</span>}</dd>
               <dt>Created</dt><dd>{shortDate(c.created_at)}</dd>
               <dt>Last change</dt><dd>{shortDate(c.updated_at)}</dd>
             </dl>

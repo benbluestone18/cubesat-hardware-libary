@@ -1,6 +1,6 @@
 "use client";
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { similarNames } from "@/app/actions/components";
 import { recordFile } from "@/app/actions/files";
@@ -78,5 +78,77 @@ export function FileUpload({ componentId, revision }: { componentId: string; rev
       <small className="faint">Any file up to 50 MB: CAD exports, KiCad zips, PDFs, photos, spreadsheets. On an iPhone or iPad, tap Choose Files to pick from the Files app, iCloud Drive or Google Drive.</small>
       {msg && <p className={`notice${msg.kind === "error" ? " notice--error" : ""}`} role={msg.kind === "error" ? "alert" : "status"}>{msg.text}</p>}
     </form>
+  );
+}
+
+/** A comment box that suggests teammates after you type "@", and fills in "@Full Name". */
+export function MentionTextarea({ people, name, placeholder, required, maxLength, ariaLabel }: { people: { id: string; name: string }[]; name: string; placeholder?: string; required?: boolean; maxLength?: number; ariaLabel?: string }) {
+  const box = useRef<HTMLTextAreaElement>(null);
+  const [value, setValue] = useState("");
+  const [query, setQuery] = useState<{ at: number; q: string } | null>(null);
+  const [pick, setPick] = useState(0);
+  // Where the caret goes after a name is filled in, applied right after React updates the box.
+  const caretTo = useRef<number | null>(null);
+  useLayoutEffect(() => {
+    if (caretTo.current == null || !box.current) return;
+    box.current.setSelectionRange(caretTo.current, caretTo.current);
+    caretTo.current = null;
+  });
+  // Empty the box once the comment is posted (React resets the form after its action runs).
+  useEffect(() => {
+    const form = box.current?.form;
+    if (!form) return;
+    const clear = () => { setValue(""); setQuery(null); };
+    form.addEventListener("reset", clear);
+    return () => form.removeEventListener("reset", clear);
+  }, []);
+
+  const matches = query
+    ? people.filter((p) => p.name.toLowerCase().split(/\s+/).some((w) => w.startsWith(query.q.toLowerCase())) || p.name.toLowerCase().startsWith(query.q.toLowerCase())).slice(0, 6)
+    : [];
+
+  function track(text: string, caret: number) {
+    const before = text.slice(0, caret);
+    const at = before.lastIndexOf("@");
+    const q = at >= 0 ? before.slice(at + 1) : "";
+    const startsWord = at === 0 || (at > 0 && /\s|\(/.test(before[at - 1]));
+    setQuery(at >= 0 && startsWord && q.length <= 30 && !/\n|\s{2}/.test(q) ? { at, q } : null);
+    setPick(0);
+  }
+
+  function choose(p: { name: string }) {
+    if (!query || !box.current) return;
+    const caret = box.current.selectionStart;
+    const next = value.slice(0, query.at) + "@" + p.name + " " + value.slice(caret);
+    const pos = query.at + p.name.length + 2;
+    caretTo.current = pos;
+    setValue(next);
+    setQuery(null);
+  }
+
+  return (
+    <div className="mention">
+      <textarea ref={box} className="textarea" name={name} value={value} required={required} maxLength={maxLength} placeholder={placeholder} aria-label={ariaLabel}
+        aria-autocomplete="list" aria-controls="mention-list"
+        onChange={(e) => { setValue(e.target.value); track(e.target.value, e.target.selectionStart); }}
+        onClick={(e) => track(value, e.currentTarget.selectionStart)}
+        onBlur={() => setTimeout(() => setQuery(null), 150)}
+        onKeyDown={(e) => {
+          if (!matches.length) return;
+          if (e.key === "ArrowDown") { e.preventDefault(); setPick((pick + 1) % matches.length); }
+          else if (e.key === "ArrowUp") { e.preventDefault(); setPick((pick - 1 + matches.length) % matches.length); }
+          else if (e.key === "Enter" || e.key === "Tab") { e.preventDefault(); choose(matches[pick]); }
+          else if (e.key === "Escape") setQuery(null);
+        }} />
+      {matches.length > 0 && (
+        <ul className="mention__list mc-panel mc-glass" id="mention-list" role="listbox">
+          {matches.map((p, i) => (
+            <li key={p.id} role="option" aria-selected={i === pick}>
+              <button type="button" className={i === pick ? "is-on" : ""} onMouseDown={(e) => { e.preventDefault(); choose(p); }}>{p.name}</button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }

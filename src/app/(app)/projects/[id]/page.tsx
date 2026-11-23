@@ -1,13 +1,14 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { canManageTeam, getLibrary, getMemberships, type ComponentWithHealth, type Library } from "@/lib/data";
+import { canManageTeam, getLibrary, getMemberships, openIssues, type ComponentWithHealth, type Library } from "@/lib/data";
+import { grams, sumBudget, watts } from "@/lib/budget";
 import { STATUS_LABEL, STATUS_ORDER, byUrgency, type ComponentStatus, type Health } from "@/lib/status";
 import type { Folder } from "@/lib/types";
 import { addMember, createFolder, joinProject, leaveProject, removeMember, restoreItem, setLead, renameFolder, transferTeam, trashFolder, trashProject, updateProject } from "@/app/actions/projects";
 import { createClient } from "@/lib/supabase/server";
 import { shortDate } from "@/lib/week";
-import { Face, Empty } from "@/components/ui";
+import { BudgetBar, Face, Empty } from "@/components/ui";
 import { Icon, StatusIcon } from "@/components/icons";
 import { ConfirmButton } from "@/components/client";
 import { Flash, PageTitle, one, type SP } from "@/components/flash";
@@ -34,13 +35,13 @@ function descendants(folders: Folder[], id: string): Set<string> {
   return out;
 }
 
-function Task({ c, lib }: { c: ComponentWithHealth; lib: Library }) {
+function Task({ c, lib, issues = 0 }: { c: ComponentWithHealth; lib: Library; issues?: number }) {
   const owner = lib.person.get(c.owner_id);
   const folder = c.folder_id ? lib.folderPath(c.project_id, c.folder_id) : "";
   return (
     <Link className={`mc-task${c.health.health === "stalled" ? " mc-task--stalled" : ""}`} href={`/components/${c.id}`}>
       {owner ? <Face person={owner} size={32} link={false} /> : <span />}
-      <span className="mc-task__t"><b>{c.name}</b>{folder || owner?.name}</span>
+      <span className="mc-task__t"><b>{c.name}</b>{folder || owner?.name}{issues > 0 && <span style={{ display: "block", marginTop: 4 }}><span className="issue-count">{issues} open {issues === 1 ? "issue" : "issues"}</span></span>}</span>
       <span className="mc-task__end" title={c.health.reason}><StatusIcon health={c.health.health} /></span>
     </Link>
   );
@@ -132,9 +133,11 @@ async function projectTrash(projectId: string, liveIds: string[]): Promise<Trash
 export default async function ProjectPage({ params, searchParams }: { params: Params; searchParams: SP }) {
   const { id } = await params;
   const sp = await searchParams;
-  const [lib, memberships] = await Promise.all([getLibrary(), getMemberships()]);
+  const lib = await getLibrary();
+  const [memberships, issues] = await Promise.all([getMemberships(), openIssues(lib)]);
   const project = lib.project.get(id);
   if (!project) notFound();
+  const issuesOn = (cid: string) => issues.filter((m) => m.component_id === cid).length;
 
   const ownerFilter = one(sp.owner) ?? "";
   const statusFilter = one(sp.status) ?? "";
@@ -155,6 +158,7 @@ export default async function ProjectPage({ params, searchParams }: { params: Pa
   const trash = manage ? await projectTrash(id, all.map((c) => c.id)) : [];
   const others = lib.people.filter((p) => !members.some((m) => m.id === p.id));
   const owners = [...new Set(all.map((c) => c.owner_id))].map((o) => lib.person.get(o)).filter(Boolean);
+  const budget = sumBudget(all);
   const columns = COLUMNS.filter((col) => col.key !== "hold" || comps.some((c) => c.status === "on_hold"));
 
   return (
@@ -196,7 +200,7 @@ export default async function ProjectPage({ params, searchParams }: { params: Pa
                 <div className="mc-col" key={col.key}>
                   <div className="mc-col__title"><StatusIcon health={col.health} />{col.title} · {items.length}</div>
                   <div className="mc-col__panel">
-                    {items.length === 0 ? <p className="faint" style={{ fontSize: 12, padding: 8, textAlign: "center" }}>Nothing here</p> : items.map((c) => <Task key={c.id} c={c} lib={lib} />)}
+                    {items.length === 0 ? <p className="faint" style={{ fontSize: 12, padding: 8, textAlign: "center" }}>Nothing here</p> : items.map((c) => <Task key={c.id} c={c} lib={lib} issues={issuesOn(c.id)} />)}
                   </div>
                 </div>
               );
@@ -285,6 +289,24 @@ export default async function ProjectPage({ params, searchParams }: { params: Pa
               {!ownerId && members.length > 0 && " This team has no owner yet. An admin, or any lead, can take ownership from the menu next to a name."}
             </p>
           </section>
+          <section className="mc-panel mc-glass">
+            <div className="mc-panel__head"><h2>Mass and power</h2><Link className="mc-btn mc-btn--ghost mc-btn--sm" href="/projects#budget">Whole satellite</Link></div>
+            <div className="budget-grid">
+              <div>
+                <small>Mass</small>
+                <b className={project.mass_budget_g && budget.mass > Number(project.mass_budget_g) ? "over" : undefined}>{grams(budget.mass)}</b>
+                <small>{project.mass_budget_g ? `of ${grams(project.mass_budget_g)} budget` : "No budget set"} · {budget.withMass} of {budget.parts} parts</small>
+                <BudgetBar used={budget.mass} limit={project.mass_budget_g} label="Mass" />
+              </div>
+              <div>
+                <small>Power draw</small>
+                <b className={project.power_budget_w && budget.power > Number(project.power_budget_w) ? "over" : undefined}>{watts(budget.power)}</b>
+                <small>{project.power_budget_w ? `of ${watts(project.power_budget_w)} budget` : "No budget set"} · {budget.withPower} of {budget.parts} parts</small>
+                <BudgetBar used={budget.power} limit={project.power_budget_w} label="Power" />
+              </div>
+            </div>
+            <p className="faint" style={{ fontSize: 12 }}>Totals count only the parts that have a value. The team&apos;s leads set its budget in Project settings.</p>
+          </section>
           {manage && trash.length > 0 && (
             <section className="mc-panel mc-glass">
               <div className="mc-panel__head"><h2>Trash</h2><span className="mc-label">{trash.length}</span></div>
@@ -306,6 +328,10 @@ export default async function ProjectPage({ params, searchParams }: { params: Pa
                 <input type="hidden" name="id" value={id} />
                 <label className="field"><span>Name</span><input className="input" name="name" defaultValue={project.name} required maxLength={80} /></label>
                 <label className="field"><span>What it covers</span><textarea className="textarea" name="description" defaultValue={project.description} maxLength={2000} /></label>
+                <div className="row" style={{ alignItems: "flex-start", gap: 12 }}>
+                  <label className="field" style={{ flex: 1, minWidth: 120 }}><span>Mass budget (g)</span><input className="input" name="mass_budget_g" type="number" min={0} step="any" defaultValue={project.mass_budget_g ?? ""} placeholder="Optional" /></label>
+                  <label className="field" style={{ flex: 1, minWidth: 120 }}><span>Power budget (W)</span><input className="input" name="power_budget_w" type="number" min={0} step="any" defaultValue={project.power_budget_w ?? ""} placeholder="Optional" /></label>
+                </div>
                 <label className="field"><span>Status</span>
                   <select className="select" name="status" defaultValue={project.status}><option value="active">Active</option><option value="paused">Paused</option><option value="done">Done</option></select>
                   <small>Done projects drop out of the top bar but stay searchable.</small>

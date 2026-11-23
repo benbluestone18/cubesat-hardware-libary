@@ -3,7 +3,7 @@ import { cache } from "react";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { componentHealth, personHealth, type HealthResult } from "@/lib/status";
-import type { Component, Folder, Membership, Person, Project, Update } from "@/lib/types";
+import type { Comment, Component, Folder, Membership, Mission, Person, Project, Update } from "@/lib/types";
 
 /** The signed-in person, or a redirect to sign-in. Cached for one request. */
 export const getMe = cache(async (): Promise<Person> => {
@@ -135,4 +135,27 @@ export async function getMemberships(): Promise<Membership[]> {
 /** Admins, and leads of this team, can add and remove people and choose leads. */
 export function canManageTeam(me: Person, projectId: string, memberships: Membership[]): boolean {
   return me.role === "admin" || leadsTeam(me, projectId, memberships);
+}
+
+/** Open issues on live parts, newest first. */
+export async function openIssues(lib: Library): Promise<Comment[]> {
+  const supabase = await createClient();
+  const { data } = await supabase.from("comments").select("*").eq("is_issue", true).is("resolved_at", null).order("created_at", { ascending: false });
+  const live = new Set(lib.components.map((c) => c.id));
+  return ((data ?? []) as Comment[]).filter((c) => live.has(c.component_id));
+}
+
+/** Comments that mention me, newest first. */
+export async function myMentions(lib: Library, limit = 10): Promise<Comment[]> {
+  const supabase = await createClient();
+  const { data } = await supabase.from("comment_mentions").select("comments(*)").eq("person_id", lib.me.id);
+  const live = new Set(lib.components.map((c) => c.id));
+  return ((data ?? []).map((r) => r.comments as unknown as Comment).filter((c) => c && live.has(c.component_id)))
+    .sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, limit);
+}
+
+export async function getMission(): Promise<Mission> {
+  const supabase = await createClient();
+  const { data } = await supabase.from("mission").select("mass_limit_g, power_limit_w").maybeSingle();
+  return (data ?? { mass_limit_g: null, power_limit_w: null }) as Mission;
 }

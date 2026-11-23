@@ -25,7 +25,12 @@ export async function updateProject(form: FormData) {
   const { supabase } = await uid();
   const id = str(form, "id");
   const status = str(form, "status");
+  const mass = str(form, "mass_budget_g", 40), power = str(form, "power_budget_w", 40);
+  const mass_budget_g = mass ? Number(mass) : null, power_budget_w = power ? Number(power) : null;
+  if (mass_budget_g !== null && !(mass_budget_g > 0 && mass_budget_g <= 100000)) back(`/projects/${id}`, "The mass budget must be grams, above 0");
+  if (power_budget_w !== null && !(power_budget_w > 0 && power_budget_w <= 1000)) back(`/projects/${id}`, "The power budget must be watts, above 0");
   const { data: saved, error } = await supabase.from("projects").update({
+    mass_budget_g, power_budget_w,
     name: str(form, "name", 80),
     description: str(form, "description", 2000),
     status: ["active", "paused", "done"].includes(status) ? status : "active",
@@ -144,4 +149,17 @@ export async function restoreItem(form: FormData) {
   if (error || !data?.length) back(to, error ? explain(error) : "You don't have permission to do that");
   revalidatePath("/", "layout");
   back(to, "Restored", "ok");
+}
+
+/** Admins set the whole satellite's mass and power limits. */
+export async function setMissionLimits(form: FormData) {
+  const { supabase } = await uid();
+  const mass = str(form, "mass_limit_g", 40), power = str(form, "power_limit_w", 40);
+  const mass_limit_g = mass ? Number(mass) : null, power_limit_w = power ? Number(power) : null;
+  if (mass_limit_g !== null && !(mass_limit_g > 0 && mass_limit_g <= 100000)) back("/projects", "The mass limit must be grams, above 0");
+  if (power_limit_w !== null && !(power_limit_w > 0 && power_limit_w <= 1000)) back("/projects", "The power limit must be watts, above 0");
+  const { data, error } = await supabase.from("mission").update({ mass_limit_g, power_limit_w, updated_at: new Date().toISOString() }).eq("id", true).select("id");
+  if (error || !data?.length) back("/projects", error ? explain(error) : "Only an admin can change the satellite limits");
+  revalidatePath("/", "layout");
+  back("/projects", "Satellite limits saved", "ok");
 }
