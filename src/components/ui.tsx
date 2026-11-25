@@ -3,7 +3,7 @@ import { StatusIcon } from "./icons";
 import { HEALTH_LABEL, STATUS_LABEL, STATUS_STEP, type ComponentStatus, type Health, type HealthResult } from "@/lib/status";
 import type { Person } from "@/lib/types";
 import { splitMentions } from "@/lib/mentions";
-import { fill } from "@/lib/budget";
+import { fill, grams, watts } from "@/lib/budget";
 
 export function initials(name: string): string {
   const parts = name.trim().split(/\s+/);
@@ -49,24 +49,34 @@ export function Empty({ children, action }: { children: React.ReactNode; action?
   return <div className="empty"><p>{children}</p>{action}</div>;
 }
 
-/** A comment's text with @mentions turned into links to the person. */
-export function CommentBody({ body, people, plain = false }: { body: string; people: { id: string; name: string }[]; plain?: boolean }) {
+/** A comment's text with @mentions turned into links to the person. Old names (aliases) still link, shown as today's name. */
+export function CommentBody({ body, people, aliases = [], plain = false }: { body: string; people: { id: string; name: string }[]; aliases?: { id: string; name: string }[]; plain?: boolean }) {
+  const now = new Map(people.map((p) => [p.id, p.name]));
+  // An old name that someone else uses today belongs to them, not to the alias.
+  const taken = new Set(people.map((p) => p.name.trim().toLowerCase()));
+  const all = [...people, ...aliases.filter((a) => now.has(a.id) && !taken.has(a.name.trim().toLowerCase()))];
   return (
     <>
-      {splitMentions(body, people).map((part, i) => "person" in part
-        ? plain ? <b key={i} className="mention-link">{part.text}</b> : <Link key={i} className="mention-link" href={`/people/${part.person.id}`}>{part.text}</Link>
-        : <span key={i}>{part.text}</span>)}
+      {splitMentions(body, all).map((part, i) => {
+        if (!("person" in part)) return <span key={i}>{part.text}</span>;
+        const text = `@${now.get(part.person.id) ?? part.text.slice(1)}`;
+        return plain ? <b key={i} className="mention-link">{text}</b> : <Link key={i} className="mention-link" href={`/people/${part.person.id}`}>{text}</Link>;
+      })}
     </>
   );
 }
 
-/** A thin bar showing how much of a budget is used. */
-export function BudgetBar({ used, limit, label }: { used: number; limit: number | null; label: string }) {
+/** A thin bar showing how much of a budget is used, and by how much it is over. */
+export function BudgetBar({ used, limit, label, unit }: { used: number; limit: number | null; label: string; unit: "g" | "W" }) {
   const f = fill(used, limit);
   if (!f) return null;
+  const over = f.tone === "over" ? (unit === "g" ? grams : watts)(used - Number(limit)) : null;
   return (
-    <span className={`budget-bar budget-bar--${f.tone}`} role="img" aria-label={`${label}: ${Math.round(f.pct)}% of the budget`}>
-      <i style={{ width: `${Math.min(100, f.pct)}%` }} />
-    </span>
+    <>
+      <span className={`budget-bar budget-bar--${f.tone}`} role="img" aria-label={`${label}: ${Math.round(f.pct)}% of the budget`}>
+        <i style={{ width: `${Math.min(100, f.pct)}%` }} />
+      </span>
+      {over && <small className="over">{over} over budget</small>}
+    </>
   );
 }

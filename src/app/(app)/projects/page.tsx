@@ -69,13 +69,13 @@ export default async function Projects({ searchParams }: { searchParams: SP }) {
               <small>Total mass</small>
               <b className={mission.mass_limit_g && total.mass > Number(mission.mass_limit_g) ? "over" : undefined}>{grams(total.mass)}</b>
               <small>{mission.mass_limit_g ? `of ${grams(mission.mass_limit_g)} limit` : "No limit set"} · {total.withMass} of {total.parts} parts weighed</small>
-              <BudgetBar used={total.mass} limit={mission.mass_limit_g} label="Satellite mass" />
+              <BudgetBar used={total.mass} limit={mission.mass_limit_g} label="Satellite mass" unit="g" />
             </div>
             <div>
               <small>Total power draw</small>
               <b className={mission.power_limit_w && total.power > Number(mission.power_limit_w) ? "over" : undefined}>{watts(total.power)}</b>
               <small>{mission.power_limit_w ? `of ${watts(mission.power_limit_w)} limit` : "No limit set"} · {total.withPower} of {total.parts} parts measured</small>
-              <BudgetBar used={total.power} limit={mission.power_limit_w} label="Satellite power" />
+              <BudgetBar used={total.power} limit={mission.power_limit_w} label="Satellite power" unit="W" />
             </div>
           </div>
           <div className="table-wrap">

@@ -35,13 +35,51 @@ export function ComponentNameField({ defaultValue = "", exceptId }: { defaultVal
 
 const MAX = 50 * 1024 * 1024;
 
+/**
+ * Sends one file to storage with progress. The storage library has no progress callback, so this posts to
+ * the same storage endpoint it uses, signed in as the person, and the bucket's rules still decide.
+ */
+function sendFile(path: string, file: File, type: string, token: string, onProgress: (sent: number) => void): Promise<{ error: string | null }> {
+  return new Promise((resolve) => {
+    const xhr = new XMLHttpRequest();
+    const url = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/component-files/${path.split("/").map(encodeURIComponent).join("/")}`;
+    xhr.open("POST", url);
+    xhr.setRequestHeader("authorization", `Bearer ${token}`);
+    xhr.setRequestHeader("apikey", process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
+    xhr.setRequestHeader("content-type", type);
+    xhr.setRequestHeader("cache-control", "max-age=3600");
+    xhr.setRequestHeader("x-upsert", "false");
+    xhr.upload.onprogress = (e) => { if (e.lengthComputable) onProgress(e.loaded); };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) return resolve({ error: null });
+      let message = `Upload failed (${xhr.status})`;
+      try { const body = JSON.parse(xhr.responseText); message = body.message ?? body.error ?? message; } catch { /* keep the status */ }
+      resolve({ error: xhr.status === 403 || /row-level|unauthorized/i.test(message) ? "Only the owner and editors can upload here" : message });
+    };
+    xhr.onerror = () => resolve({ error: "The upload stopped. Check the wifi and try again." });
+    xhr.send(file);
+  });
+}
+
+function mb(n: number) {
+  return `${(n / 1024 / 1024).toFixed(n < 10 * 1024 * 1024 ? 1 : 0)} MB`;
+}
+
 /** Uploads straight from the browser to storage (so big zips don't pass through the server), then records it. */
 export function FileUpload({ componentId, revision }: { componentId: string; revision: string }) {
   const router = useRouter();
   const input = useRef<HTMLInputElement>(null);
   const [rev, setRev] = useState(revision);
   const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState<{ name: string; sent: number; total: number; index: number; count: number } | null>(null);
   const [msg, setMsg] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
+
+  // "Uploaded" goes away on its own after a few seconds; errors stay until the next try.
+  useEffect(() => {
+    if (msg?.kind !== "ok") return;
+    const t = setTimeout(() => setMsg(null), 4000);
+    return () => clearTimeout(t);
+  }, [msg]);
 
   async function upload(e: React.FormEvent) {
     e.preventDefault();
@@ -49,32 +87,45 @@ export function FileUpload({ componentId, revision }: { componentId: string; rev
     if (files.length === 0) { setMsg({ kind: "error", text: "Pick a file first" }); return; }
     setBusy(true); setMsg(null);
     const supabase = createClient();
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) { setBusy(false); setMsg({ kind: "error", text: "You've been signed out. Sign in again, then upload." }); return; }
     let done = 0;
-    for (const file of files) {
+    const errors: string[] = [];
+    for (const [index, file] of files.entries()) {
       // Any kind of file. Downloads always come back as attachments, so the type is only a label.
       const type = file.type || "application/octet-stream";
-      if (file.size === 0) { setMsg({ kind: "error", text: `${file.name} is empty` }); continue; }
-      if (file.size > MAX) { setMsg({ kind: "error", text: `${file.name} is over 50 MB. Put it in Google Drive and add a link instead.` }); continue; }
+      if (file.size === 0) { errors.push(`${file.name} is empty`); continue; }
+      if (file.size > MAX) { errors.push(`${file.name} is over 50 MB. Put it in Google Drive and add a link instead.`); continue; }
       const safe = file.name.replace(/[^\w.\-]+/g, "_").slice(-120);
       const r = (rev.trim() || "A").replace(/[^\w.\-]+/g, "_").slice(0, 12);
       const path = `${componentId}/${r}/${crypto.randomUUID().slice(0, 8)}-${safe}`;
-      const { error } = await supabase.storage.from("component-files").upload(path, file, { contentType: type, upsert: false });
-      if (error) { setMsg({ kind: "error", text: /row-level|unauthorized|403/i.test(error.message) ? "Only the owner and editors can upload here" : `${file.name}: ${error.message}` }); continue; }
+      setProgress({ name: file.name, sent: 0, total: file.size, index, count: files.length });
+      const { error } = await sendFile(path, file, type, session.access_token, (sent) => setProgress((p) => (p ? { ...p, sent } : p)));
+      if (error) { errors.push(`${file.name}: ${error}`); continue; }
       const res = await recordFile({ component_id: componentId, revision: r, storage_path: path, filename: file.name.slice(0, 200), size_bytes: file.size, content_type: type });
-      if (res.error) { setMsg({ kind: "error", text: `${file.name}: ${res.error}` }); continue; }
+      if (res.error) { errors.push(`${file.name}: ${res.error}`); continue; }
       done++;
     }
-    setBusy(false);
-    if (done) { setMsg({ kind: "ok", text: done === 1 ? "Uploaded" : `Uploaded ${done} files` }); if (input.current) input.current.value = ""; router.refresh(); }
+    setBusy(false); setProgress(null);
+    if (errors.length) setMsg({ kind: "error", text: (done ? `Uploaded ${done}. ` : "") + errors.join(" ") });
+    else if (done) setMsg({ kind: "ok", text: done === 1 ? "Uploaded" : `Uploaded ${done} files` });
+    if (done) { if (input.current) input.current.value = ""; router.refresh(); }
   }
 
+  const pct = progress && progress.total ? Math.round((progress.sent / progress.total) * 100) : 0;
   return (
     <form onSubmit={upload} className="stack-sm">
       <div className="row">
         <input ref={input} className="input input--inline" type="file" multiple aria-label="Files to upload" style={{ flex: 1 }} />
         <input className="input input--inline" style={{ minWidth: 0, width: 80 }} value={rev} onChange={(e) => setRev(e.target.value)} maxLength={12} aria-label="Revision" title="Revision" />
-        <button className="mc-btn mc-btn--secondary mc-btn--sm" type="submit" disabled={busy}>{busy ? "Uploading…" : "Upload"}</button>
+        <button className="mc-btn mc-btn--secondary mc-btn--sm" type="submit" disabled={busy}>{busy ? (progress ? `${pct}%` : "Uploading…") : "Upload"}</button>
       </div>
+      {progress && (
+        <div className="stack-sm" style={{ gap: 4 }} role="status" aria-live="polite">
+          <span className="budget-bar" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct} aria-label={`Uploading ${progress.name}`}><i style={{ width: `${pct}%`, transition: "width .2s" }} /></span>
+          <small className="faint">{progress.count > 1 ? `File ${progress.index + 1} of ${progress.count}: ` : ""}{progress.name}, {mb(progress.sent)} of {mb(progress.total)}</small>
+        </div>
+      )}
       <small className="faint">Any file up to 50 MB: CAD exports, KiCad zips, PDFs, photos, spreadsheets. On an iPhone or iPad, tap Choose Files to pick from the Files app, iCloud Drive or Google Drive.</small>
       {msg && <p className={`notice${msg.kind === "error" ? " notice--error" : ""}`} role={msg.kind === "error" ? "alert" : "status"}>{msg.text}</p>}
     </form>

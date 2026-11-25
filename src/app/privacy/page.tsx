@@ -16,8 +16,8 @@ export default function PrivacyPage() {
       <h2>What we keep</h2>
       <ul>
         <li>When you sign in: your school email address. Your name on the team starts as the first part of your email, and you can change it on your profile.</li>
-        <li>What you add: components, files you upload, weekly updates, comments and meeting notes.</li>
-        <li>A record of changes (who added, edited or deleted what, and when), so the team can see and undo mistakes.</li>
+        <li>What you add: parts, files you upload, weekly updates, comments and meeting notes.</li>
+        <li>A record of changes (who added, edited or deleted what, and when), so admins can see what changed and put things right, for example by restoring something from the trash.</li>
         <li>Your light or dark theme choice.</li>
       </ul>
 
@@ -28,7 +28,7 @@ export default function PrivacyPage() {
       <p>The data lives in a Supabase database in Canada. The website runs on Vercel. Both services keep it on our behalf and do not use it for anything else. Sign-in links are sent by email through Brevo.</p>
 
       <h2>Removing your data</h2>
-      <p>Ask the library admin, who is listed on the People page with the Admin role. They can delete your account and what you added.</p>
+      <p>Ask the library admin, who is listed on the People page with the Admin role. They can move what you added to the trash in the app, and they have your account and your data deleted for good through the database dashboard, which the app itself can&apos;t do.</p>
     </main>
   );
 }

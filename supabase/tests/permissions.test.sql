@@ -1,7 +1,7 @@
 -- Permission rules, checked against the real database. Run with: npx supabase test db
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(89);
+select plan(93);
 
 -- Start from an empty library, even when local test data is loaded. All of this rolls back.
 truncate public.activity_log, public.comments, public.updates, public.files, public.component_editors, public.components,
@@ -158,6 +158,16 @@ select is((select mass_limit_g from mission), null, 'A member cannot change the 
 select pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
 update mission set mass_limit_g = 4000 where id;
 select is((select mass_limit_g from mission), 4000.00, 'The admin sets the satellite limits');
+select ok((select count(*) from activity_log where entity = 'mission' and detail -> 'changed' ? 'mass_limit_g') = 1, 'Changing the satellite limits is logged');
+-- Renames are logged with the old name, so old @mentions still find the person. Theme changes are not logged.
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000b');
+update people set name = 'Alex Rivera' where id = '00000000-0000-0000-0000-00000000000b';
+select is((select detail ->> 'old_name' from activity_log where entity = 'people' and entity_id = '00000000-0000-0000-0000-00000000000b' order by id desc limit 1), 'Alex', 'A rename is logged with the old name');
+update people set theme = 'dark' where id = '00000000-0000-0000-0000-00000000000b';
+select is((select count(*)::int from activity_log where entity = 'people' and entity_id = '00000000-0000-0000-0000-00000000000b'), 1, 'A theme change is not logged');
+update people set name = 'Alex' where id = '00000000-0000-0000-0000-00000000000b';
+select ok((select count(*) from activity_log where entity = 'people') = 2, 'Renaming back is logged too');
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
 -- Owners: only the owner or an admin hands a team over, and the owner can't be dropped while others remain.
 -- Power now: Skyler (owner, lead), Jordan (lead), Alex (lead).
 select pg_temp.act_as('00000000-0000-0000-0000-00000000000d');

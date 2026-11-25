@@ -6,7 +6,7 @@ import { ComponentFields } from "@/components/component-fields";
 import { Empty } from "@/components/ui";
 import { Flash, PageTitle, one, type SP } from "@/components/flash";
 
-export const metadata: Metadata = { title: "New component" };
+export const metadata: Metadata = { title: "New part" };
 
 export default async function NewComponent({ searchParams }: { searchParams: SP }) {
   const sp = await searchParams;
@@ -15,13 +15,13 @@ export default async function NewComponent({ searchParams }: { searchParams: SP 
   const project = projectId ? lib.project.get(projectId) : undefined;
 
   if (lib.projects.length === 0) {
-    return <><PageTitle title="New component" /><Empty action={<Link className="mc-btn mc-btn--primary mc-btn--sm" href="/projects">Create a project</Link>}>Components live in a project. Make one first.</Empty></>;
+    return <><PageTitle title="New part" /><Empty action={<Link className="mc-btn mc-btn--primary mc-btn--sm" href="/projects">Create a project</Link>}>Parts live in a project. Make one first.</Empty></>;
   }
 
   if (!project) {
     return (
       <>
-        <PageTitle title="New component" sub="Which project is it part of?" />
+        <PageTitle title="New part" sub="Which project is it part of?" />
         <Flash sp={sp} />
         <form method="get" className="form mc-panel mc-glass">
           <label className="field"><span>Project</span>
@@ -38,7 +38,7 @@ export default async function NewComponent({ searchParams }: { searchParams: SP 
 
   return (
     <>
-      <PageTitle eyebrow={<><Link href={`/projects/${project.id}`}>{project.name}</Link><span>/</span><Link href="/components/new">change project</Link></>} title="New component" sub="You'll be the owner. Only you, people you add as editors, and the admin can change it. Anyone can comment." />
+      <PageTitle eyebrow={<><Link href={`/projects/${project.id}`}>{project.name}</Link><span>/</span><Link href="/components/new">change project</Link></>} title="New part" sub="You'll be the owner. Only you, people you add as editors, and the admin can change it. Anyone can comment." />
       <Flash sp={sp} />
       <form action={createComponent} className="form mc-panel mc-glass">
         <input type="hidden" name="project_id" value={project.id} />

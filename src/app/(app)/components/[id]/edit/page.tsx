@@ -8,7 +8,7 @@ import { ComponentFields } from "@/components/component-fields";
 import { ConfirmButton } from "@/components/client";
 import { Flash, PageTitle, type SP } from "@/components/flash";
 
-export const metadata: Metadata = { title: "Edit component" };
+export const metadata: Metadata = { title: "Edit part" };
 
 export default async function EditComponent({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: SP }) {
   const { id } = await params;
@@ -24,7 +24,7 @@ export default async function EditComponent({ params, searchParams }: { params: 
 
   return (
     <>
-      <PageTitle eyebrow={<><Link href={`/components/${id}`}>{c.name}</Link><span>/</span></>} title="Edit component" />
+      <PageTitle eyebrow={<><Link href={`/components/${id}`}>{c.name}</Link><span>/</span></>} title="Edit part" />
       <Flash sp={sp} />
       {!mayEdit ? (
         <p className="notice notice--warn">Only {lib.person.get(c.owner_id)?.name ?? "the owner"}, their editors, the team&apos;s leads and admins can change this part. You can still leave a comment.</p>

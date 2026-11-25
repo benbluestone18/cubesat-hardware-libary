@@ -62,7 +62,7 @@ function Tree({ parent, folders, comps, lib, projectId, all }: { parent: string 
               <span className="tree__name">{f.name}</span>
               <span className="tree__tools">
                 <Link className="mc-btn mc-btn--ghost mc-btn--sm" href={`/components/new?project=${projectId}&folder=${f.id}`}>Add part</Link>
-                <details className="inline">
+                <details className="inline" data-pop="">
                   <summary className="mc-btn mc-btn--ghost mc-btn--sm">Folder</summary>
                   <div className="mc-panel mc-glass popover">
                     <form action={createFolder} className="row">
@@ -157,7 +157,9 @@ export default async function ProjectPage({ params, searchParams }: { params: Pa
   const ownerStuck = ownerId === lib.me.id && members.length > 1;
   const trash = manage ? await projectTrash(id, all.map((c) => c.id)) : [];
   const others = lib.people.filter((p) => !members.some((m) => m.id === p.id));
-  const owners = [...new Set(all.map((c) => c.owner_id))].map((o) => lib.person.get(o)).filter(Boolean);
+  // Everyone on the team, plus anyone else who owns a part here, so the filter isn't empty on a new project.
+  const owners = [...new Set([...rows.map((m) => m.person_id), ...all.map((c) => c.owner_id)])].map((o) => lib.person.get(o)).filter(Boolean)
+    .sort((a, b) => a!.name.localeCompare(b!.name));
   const budget = sumBudget(all);
   const columns = COLUMNS.filter((col) => col.key !== "hold" || comps.some((c) => c.status === "on_hold"));
 
@@ -170,7 +172,7 @@ export default async function ProjectPage({ params, searchParams }: { params: Pa
             ? <ConfirmButton className="mc-btn mc-btn--secondary" confirmLabel={ownerStuck ? "Hand the team over first (Team panel)" : "Yes, leave"}>Leave team</ConfirmButton>
             : <button className="mc-btn mc-btn--secondary" type="submit">Join team</button>}
         </form>
-        <Link className="mc-btn mc-btn--primary" href={`/components/new?project=${id}`}><Icon name="plus" /> New component</Link>
+        <Link className="mc-btn mc-btn--primary" href={`/components/new?project=${id}`}><Icon name="plus" /> New part</Link>
       </PageTitle>
       <Flash sp={sp} />
 
@@ -191,13 +193,13 @@ export default async function ProjectPage({ params, searchParams }: { params: Pa
           </form>
         </div>
         {all.length === 0 ? (
-          <Empty action={<Link className="mc-btn mc-btn--primary mc-btn--sm" href={`/components/new?project=${id}`}>Add the first component</Link>}>No components in {project.name} yet.</Empty>
+          <Empty action={<Link className="mc-btn mc-btn--primary mc-btn--sm" href={`/components/new?project=${id}`}>Add the first part</Link>}>No parts in {project.name} yet.</Empty>
         ) : (
-          <div className="mc-board" style={{ gridTemplateColumns: `repeat(${columns.length}, minmax(200px, 1fr))`, gap: 20, padding: 4 }}>
+          <div className="mc-board mc-board--wrap" style={{ gap: 20, padding: 4 }}>
             {columns.map((col) => {
               const items = comps.filter((c) => col.statuses.includes(c.status)).sort(byUrgency);
               return (
-                <div className="mc-col" key={col.key}>
+                <div className={`mc-col${items.length === 0 ? " mc-col--empty" : ""}`} key={col.key}>
                   <div className="mc-col__title"><StatusIcon health={col.health} />{col.title} · {items.length}</div>
                   <div className="mc-col__panel">
                     {items.length === 0 ? <p className="faint" style={{ fontSize: 12, padding: 8, textAlign: "center" }}>Nothing here</p> : items.map((c) => <Task key={c.id} c={c} lib={lib} issues={issuesOn(c.id)} />)}
@@ -213,7 +215,7 @@ export default async function ProjectPage({ params, searchParams }: { params: Pa
         <section className="mc-panel mc-glass">
           <div className="mc-panel__head">
             <h2>Library</h2>
-            <details className="inline">
+            <details className="inline" data-pop="">
               <summary className="mc-btn mc-btn--secondary mc-btn--sm"><Icon name="plus" /> Folder</summary>
               <form action={createFolder} className="row mc-panel mc-glass popover">
                 <input type="hidden" name="project_id" value={id} />
@@ -222,6 +224,7 @@ export default async function ProjectPage({ params, searchParams }: { params: Pa
               </form>
             </details>
           </div>
+          <Flash sp={sp} place="library" />
           {folders.length === 0 && comps.length === 0
             ? <p className="muted" style={{ fontSize: 13 }}>Folders group parts, like Magnetorquers or Sun sensors. They can nest.</p>
             : <Tree parent={null} folders={folders} comps={comps} lib={lib} projectId={id} all={folders} />}
@@ -230,6 +233,7 @@ export default async function ProjectPage({ params, searchParams }: { params: Pa
         <div className="stack">
           <section className="mc-panel mc-glass">
             <div className="mc-panel__head"><h2>Team</h2><span className="mc-label">{members.length}</span></div>
+            <Flash sp={sp} place="team" />
             {members.length === 0 ? <p className="muted" style={{ fontSize: 13 }}>No one is on this team yet.</p> : (
               <div className="stack-sm" style={{ gap: 2 }}>
                 {members.map((m) => (
@@ -242,7 +246,7 @@ export default async function ProjectPage({ params, searchParams }: { params: Pa
                       </div>
                     </Link>
                     {(manage || m.id === lib.me.id) && (
-                      <details className="inline member-row__menu">
+                      <details className="inline member-row__menu" data-pop="">
                         <summary className="mc-icon-btn mc-icon-btn--sm" aria-label={m.id === lib.me.id ? "Your place on the team" : `Change ${m.name}'s place on the team`}><Icon name="chevron" /></summary>
                         <div className="mc-panel mc-glass popover stack-sm">
                           {canTransfer && m.id !== ownerId && (
@@ -296,13 +300,13 @@ export default async function ProjectPage({ params, searchParams }: { params: Pa
                 <small>Mass</small>
                 <b className={project.mass_budget_g && budget.mass > Number(project.mass_budget_g) ? "over" : undefined}>{grams(budget.mass)}</b>
                 <small>{project.mass_budget_g ? `of ${grams(project.mass_budget_g)} budget` : "No budget set"} · {budget.withMass} of {budget.parts} parts</small>
-                <BudgetBar used={budget.mass} limit={project.mass_budget_g} label="Mass" />
+                <BudgetBar used={budget.mass} limit={project.mass_budget_g} label="Mass" unit="g" />
               </div>
               <div>
                 <small>Power draw</small>
                 <b className={project.power_budget_w && budget.power > Number(project.power_budget_w) ? "over" : undefined}>{watts(budget.power)}</b>
                 <small>{project.power_budget_w ? `of ${watts(project.power_budget_w)} budget` : "No budget set"} · {budget.withPower} of {budget.parts} parts</small>
-                <BudgetBar used={budget.power} limit={project.power_budget_w} label="Power" />
+                <BudgetBar used={budget.power} limit={project.power_budget_w} label="Power" unit="W" />
               </div>
             </div>
             <p className="faint" style={{ fontSize: 12 }}>Totals count only the parts that have a value. The team&apos;s leads set its budget in Project settings.</p>

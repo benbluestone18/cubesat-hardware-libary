@@ -57,7 +57,7 @@ export function componentHealth(c: ComponentHealthInput, now: Date = new Date())
   if (c.status === "released" || c.status === "built") return { health: "done", days, reason: STATUS_LABEL[c.status] };
   if (c.status === "on_hold") return { health: "warn", days, reason: "On hold" };
   if (c.latest_blocked && c.latest_blocked.trim()) return { health: "stalled", days, reason: "Blocked" };
-  if (c.status === "planned" && !c.last_update_at) return { health: "planned", days, reason: "Not started" };
+  if (c.status === "planned" && !c.last_update_at) return { health: "planned", days, reason: "Planned" };
   if (days >= STALL_DAYS) return { health: "stalled", days, reason: `No update for ${days}d` };
   if (days >= QUIET_DAYS) return { health: "warn", days, reason: `No update for ${days}d` };
   return { health: "working", days, reason: STATUS_LABEL[c.status] };
@@ -69,7 +69,16 @@ export function personHealth(latestUpdateAt: string | null, activeComponents: nu
   const days = daysSince(latestUpdateAt ?? joinedAt, now) ?? 0;
   if (days >= STALL_DAYS) return { health: "stalled", days, reason: latestUpdateAt ? `No update for ${days}d` : "No updates yet" };
   if (days >= QUIET_DAYS) return { health: "warn", days, reason: latestUpdateAt ? `No update for ${days}d` : "No updates yet" };
+  // Someone new who hasn't posted yet isn't "on track" yet, just not late.
+  if (!latestUpdateAt) return { health: "working", days, reason: "No updates yet" };
   return { health: "done", days, reason: "On track" };
+}
+
+/** The words next to a person's state: "On track", "No updates yet", "Quiet 9d". */
+export function personStateLabel(h: HealthResult): string {
+  if (h.health === "done") return "On track";
+  if (h.health === "working") return h.reason;
+  return `${HEALTH_LABEL[h.health]} ${h.days}d`;
 }
 
 export function worst(healths: Health[]): Health {

@@ -38,6 +38,15 @@ function budget(form: FormData, retry: string) {
   return { mass_g, power_w };
 }
 
+/** Another live part in the same project with exactly this name (ignoring case)? Similar names only warn; exact ones are refused. */
+async function nameTaken(supabase: Awaited<ReturnType<typeof createClient>>, project_id: string, name: string, exceptId?: string) {
+  let q = supabase.from("components").select("id").eq("project_id", project_id).is("deleted_at", null)
+    .ilike("name", name.replace(/[\\%_]/g, (ch) => "\\" + ch)).limit(1);
+  if (exceptId) q = q.neq("id", exceptId);
+  const { data } = await q;
+  return (data?.length ?? 0) > 0;
+}
+
 function status(v: string) {
   return (STATUS_ORDER as string[]).includes(v) ? v : "planned";
 }
@@ -52,6 +61,7 @@ export async function createComponent(form: FormData) {
   if (!name) back(retry, "Give the part a name");
   if (link === false) back(retry, "The Onshape link must start with https:// and be on onshape.com");
   const sizes = budget(form, retry);
+  if (await nameTaken(supabase, project_id, name)) back(retry, `${name} already exists in this project. Open that part, or give this one a different name.`);
   const { data, error } = await supabase.from("components").insert({
     ...sizes,
     project_id, folder_id: optional(form, "folder_id"), name, owner_id: me,
@@ -69,9 +79,13 @@ export async function updateComponent(form: FormData) {
   const link = onshape(optional(form, "onshape_url", 1000));
   if (link === false) back(`/components/${id}/edit`, "The Onshape link must start with https:// and be on onshape.com");
   const sizes = budget(form, `/components/${id}/edit`);
+  const name = str(form, "name", 120);
+  if (!name) back(`/components/${id}/edit`, "Give the part a name");
+  const { data: cur } = await supabase.from("components").select("project_id").eq("id", id).maybeSingle();
+  if (cur && await nameTaken(supabase, cur.project_id, name, id)) back(`/components/${id}/edit`, `Another part in this project is already called ${name}`);
   const { error } = await supabase.from("components").update({
     ...sizes,
-    name: str(form, "name", 120), description: str(form, "description", 4000), status: status(str(form, "status")),
+    name, description: str(form, "description", 4000), status: status(str(form, "status")),
     onshape_url: link, revision: str(form, "revision", 12) || "A", folder_id: optional(form, "folder_id"),
   }).eq("id", id).select("id").single();
   if (error) back(`/components/${id}/edit`, explain(error));
@@ -93,7 +107,7 @@ export async function trashComponent(form: FormData) {
   const { data, error } = await supabase.from("components").update({ deleted_at: new Date().toISOString() }).eq("id", id).select("project_id").single();
   if (error || !data) back(`/components/${id}`, explain(error));
   revalidatePath("/", "layout");
-  back(`/projects/${data.project_id}`, "Moved the component to trash. The team's leads and admins can restore it.", "ok");
+  back(`/projects/${data.project_id}`, "Moved the part to trash. The team's leads and admins can restore it.", "ok");
 }
 
 export async function addEditor(form: FormData) {
@@ -130,9 +144,9 @@ export async function addComment(form: FormData) {
   const id = str(form, "component_id");
   const body = str(form, "body", 4000);
   const is_issue = str(form, "is_issue") === "on";
-  if (!body) back(`/components/${id}#comments`, is_issue ? "Describe the issue first" : "Write a comment first");
+  if (!body) back(`/components/${id}`, is_issue ? "Describe the issue first" : "Write a comment first", "error", "comments");
   const { data, error } = await supabase.from("comments").insert({ component_id: id, author_id: me, body, is_issue }).select("id").single();
-  if (error || !data) back(`/components/${id}`, explain(error));
+  if (error || !data) back(`/components/${id}`, explain(error), "error", "comments");
   const { data: people } = await supabase.from("people").select("id, name");
   const mentioned = findMentions(body, people ?? []).filter((p) => p !== me);
   if (mentioned.length) await supabase.from("comment_mentions").insert(mentioned.map((person_id) => ({ comment_id: data.id, person_id })));
@@ -146,7 +160,7 @@ export async function setIssue(form: FormData) {
   const resolve = str(form, "resolve") === "true";
   const { data, error } = await supabase.from("comments").update({ resolved_at: resolve ? new Date().toISOString() : null })
     .eq("id", str(form, "id")).eq("is_issue", true).select("id");
-  if (error || !data?.length) back(`/components/${component_id}#comments`, error ? explain(error) : "Only the person who raised it, the part's editors or an admin can change this issue");
+  if (error || !data?.length) back(`/components/${component_id}`, error ? explain(error) : "Only the person who raised it, the part's editors or an admin can change this issue", "error", "comments");
   revalidatePath("/", "layout");
 }
 

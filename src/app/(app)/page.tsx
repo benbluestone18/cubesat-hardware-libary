@@ -1,7 +1,7 @@
 import Link from "next/link";
-import { getLibrary, myMentions, openIssues, peopleHealth, recentUpdates } from "@/lib/data";
+import { getLibrary, myMentions, nameAliases, openIssues, peopleHealth, recentUpdates } from "@/lib/data";
 import { createClient } from "@/lib/supabase/server";
-import { byUrgency, HEALTH_LABEL, type Health } from "@/lib/status";
+import { byUrgency, HEALTH_LABEL, personStateLabel, type Health } from "@/lib/status";
 import { ago, weekLabel, weekRange, weekStart } from "@/lib/week";
 import { StaleAlert, UpdateEntry } from "@/components/cards";
 import { CommentBody, Face, State, Empty } from "@/components/ui";
@@ -14,13 +14,14 @@ export default async function Feed({ searchParams }: { searchParams: SP }) {
   const supabase = await createClient();
   // One round trip: every query starts now, instead of waiting for the library first.
   const libP = getLibrary();
-  const [lib, updates, people, { data: week }, mentions, issues] = await Promise.all([
+  const [lib, updates, people, { data: week }, mentions, issues, aliases] = await Promise.all([
     libP,
     recentUpdates(libP, { limit: 25 }),
     peopleHealth(libP),
     supabase.from("weeks").select("*").eq("week_start", thisWeek).maybeSingle(),
     myMentions(libP, 6),
     openIssues(libP),
+    nameAliases(),
   ]);
   const names = lib.people.map((p) => ({ id: p.id, name: p.name }));
   const partOf = (cid: string) => lib.components.find((c) => c.id === cid);
@@ -34,7 +35,7 @@ export default async function Feed({ searchParams }: { searchParams: SP }) {
   const order: Health[] = ["done", "working", "warn", "stalled", "planned"];
   const total = lib.components.length;
   const ranked = [...people].filter((p) => p.health).sort((a, b) => {
-    const r: Record<string, number> = { stalled: 3, warn: 2, done: 1 };
+    const r: Record<string, number> = { stalled: 3, warn: 2, working: 1, done: 0 };
     return r[b.health!.health] - r[a.health!.health] || b.health!.days - a.health!.days;
   });
   const idle = people.filter((p) => !p.health);
@@ -44,7 +45,7 @@ export default async function Feed({ searchParams }: { searchParams: SP }) {
       <PageTitle
         eyebrow={<><span>{weekLabel(thisWeek)}</span><span>·</span><span>{weekRange(thisWeek)}</span></>}
         title={`Hi, ${lib.me.name.split(" ")[0]}`}
-        sub={total === 0 ? "Nothing in the library yet. Start with a project, then add the parts you own." : `${total} components across ${lib.projects.length} projects. Blocked and quiet work comes first.`}
+        sub={total === 0 ? "Nothing in the library yet. Start with a project, then add the parts you own." : `${total} ${total === 1 ? "part" : "parts"} across ${lib.projects.length} ${lib.projects.length === 1 ? "project" : "projects"}. Blocked and quiet work comes first.`}
       />
       <Flash sp={sp} />
 
@@ -113,7 +114,7 @@ export default async function Feed({ searchParams }: { searchParams: SP }) {
                   return (
                     <Link key={m.id} className="mention-item" href={`/components/${m.component_id}#c-${m.id}`}>
                       <span className="faint" style={{ fontSize: 12 }}>{who?.name.split(" ")[0] ?? "Someone"} on {part?.name} · {ago(m.created_at)}</span>
-                      <span className="mention-item__body"><CommentBody body={m.body.length > 160 ? m.body.slice(0, 160) + "…" : m.body} people={names} plain /></span>
+                      <span className="mention-item__body"><CommentBody body={m.body.length > 160 ? m.body.slice(0, 160) + "…" : m.body} people={names} aliases={aliases} plain /></span>
                     </Link>
                   );
                 })}
@@ -154,7 +155,7 @@ export default async function Feed({ searchParams }: { searchParams: SP }) {
                 <Link key={person.id} className="person-row" href={`/people/${person.id}`}>
                   <Face person={person} size={36} ring={health!.health} link={false} />
                   <div style={{ minWidth: 0 }}><div className="person-row__name">{person.name}</div><div className="person-row__meta">{active.length} active · last update {ago(latest)}</div></div>
-                  <State health={health!.health} label={health!.health === "done" ? "On track" : `${HEALTH_LABEL[health!.health]} ${health!.days}d`} />
+                  <State health={health!.health} label={personStateLabel(health!)} />
                 </Link>
               ))}
               {idle.length > 0 && <p className="faint" style={{ fontSize: 13, padding: "8px 8px 0" }}>{idle.length === 1 ? "1 person owns" : `${idle.length} people own`} nothing active yet.</p>}

@@ -11,7 +11,7 @@ const geistMono = Geist_Mono({ subsets: ["latin"], variable: "--font-geist-mono"
 
 export const metadata: Metadata = {
   title: { default: "Hardware Library", template: "%s · Hardware Library" },
-  description: "LG CubeSat hardware library: projects, components, files and weekly updates.",
+  description: "LG CubeSat hardware library: projects, parts, files and weekly updates.",
   robots: { index: false, follow: false },
 };
 
